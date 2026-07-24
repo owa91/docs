@@ -1,0 +1,171 @@
+---
+title: "Clody Reactions API: Add Emoji Reactions to Messages"
+sidebarTitle: "Reactions"
+description: "API reference for Clody emoji reactions on Branch messages and Picnic posts. Add, list, and remove reactions with real-time Socket.IO updates."
+---
+
+Clody lets you attach emoji reactions to both Branch messages and Picnic posts. Each reaction is tied to a specific message, an emoji character, and the user who placed it. When you add or remove a reaction, Clody broadcasts a Socket.IO event to every member of the relevant channel so all clients stay in sync instantly.
+
+## The Reaction Object
+
+Every reaction endpoint returns one or more reaction objects with the following fields.
+
+<ResponseField name="id" type="integer">
+  Unique row identifier for this reaction.
+</ResponseField>
+
+<ResponseField name="message" type="integer">
+  ID of the Branch message or Picnic post this reaction belongs to.
+</ResponseField>
+
+<ResponseField name="ispicnic" type="boolean">
+  `true` if the reaction is on a Picnic post; `false` if it is on a Branch message.
+</ResponseField>
+
+<ResponseField name="emoji" type="string">
+  The Unicode emoji character, e.g. `"👍"`.
+</ResponseField>
+
+<ResponseField name="author" type="integer">
+  User ID of the person who added this reaction.
+</ResponseField>
+
+<Note>
+  A message can have at most **50 reactions** across all users and emoji. Reacting with the same emoji you have already used on a message is a no-op — the server returns your existing reaction without creating a duplicate.
+</Note>
+
+---
+
+## Endpoints
+
+### Fetch reactions — `POST /api/reactions/get`
+
+Returns all reactions for one or more messages in a single request. You can pass a single message ID or an array of up to 200 IDs; the response is keyed by message ID string so you can merge it into your local state efficiently.
+
+**Request body**
+
+<ParamField body="is_picnic" type="boolean" required>
+  `true` to query Picnic post reactions; `false` for Branch message reactions.
+</ParamField>
+
+<ParamField body="ids" type="array of integers">
+  Batch of message IDs to fetch reactions for. Mutually exclusive with `id`. Maximum **200** IDs per request.
+</ParamField>
+
+<ParamField body="id" type="integer">
+  Single message ID. Use this as a shorthand when you only need one message. Ignored when `ids` is present.
+</ParamField>
+
+**Response `200`**
+
+An object whose keys are message ID strings and whose values are arrays of reaction objects.
+
+```json
+{
+  "42": [
+    { "id": 1, "message": 42, "ispicnic": false, "emoji": "👍", "author": 7 },
+    { "id": 2, "message": 42, "ispicnic": false, "emoji": "😂", "author": 9 }
+  ],
+  "43": []
+}
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `403`  | You are not a member of the channel that contains this message. |
+| `404`  | The specified message does not exist. |
+
+---
+
+### Add a reaction — `POST /api/reaction/create`
+
+Adds an emoji reaction to a message. If you have already reacted with that emoji, the server returns the existing reaction unchanged (idempotent).
+
+**Request body**
+
+<ParamField body="is_picnic" type="boolean" required>
+  `true` for a Picnic post; `false` for a Branch message.
+</ParamField>
+
+<ParamField body="id" type="integer" required>
+  ID of the message you are reacting to.
+</ParamField>
+
+<ParamField body="emoji" type="string" required>
+  A single valid Unicode emoji character, e.g. `"🔥"`. Non-emoji strings are rejected.
+</ParamField>
+
+**Response `200`** — the reaction object.
+
+```json
+{ "id": 17, "message": 42, "ispicnic": false, "emoji": "🔥", "author": 5 }
+```
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400`  | `"This isn't emoji"` | The value you passed for `emoji` is not a recognised Unicode emoji. |
+| `400`  | `"Too many reactions"` | The message already has 50 reactions. |
+| `403`  | — | You are not a member of the channel. |
+| `404`  | — | The message does not exist. |
+
+---
+
+### Remove a reaction — `POST /api/reaction/delete`
+
+Deletes a reaction you own. You can identify the reaction either by its row `id` (option A) or by the combination of message + emoji (option B) — useful when your UI stores the emoji but not the reaction row ID.
+
+**Request body — option A (by reaction ID)**
+
+<ParamField body="id" type="integer" required>
+  The reaction row ID returned when the reaction was created.
+</ParamField>
+
+**Request body — option B (by message + emoji)**
+
+<ParamField body="message" type="integer" required>
+  ID of the message the reaction is on.
+</ParamField>
+
+<ParamField body="emoji" type="string" required>
+  The emoji character of the reaction to remove.
+</ParamField>
+
+<ParamField body="is_picnic" type="boolean" required>
+  `true` for a Picnic post; `false` for a Branch message.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400`  | Required fields are missing. |
+| `403`  | You are not the author of this reaction. |
+| `404`  | The reaction does not exist. |
+
+---
+
+## Real-Time Events
+
+Clody pushes reaction changes over Socket.IO on the main `/` namespace. You receive these events only for channels you are a member of.
+
+### `new_reaction`
+
+Fires when any member adds a reaction. The payload is the full reaction object.
+
+```json
+{ "id": 17, "message": 42, "ispicnic": false, "emoji": "🔥", "author": 5 }
+```
+
+### `delete_reaction`
+
+Fires when any member removes a reaction. The payload is the reaction object that was deleted.
+
+```json
+{ "id": 17, "message": 42, "ispicnic": false, "emoji": "🔥", "author": 5 }
+```

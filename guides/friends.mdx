@@ -1,0 +1,220 @@
+---
+title: "How to Manage Friends, Requests, and Blocks in Clody"
+sidebarTitle: "Friends"
+description: "Learn how to send friend requests, accept or decline them, remove friends, and block users in Clody. Friend connections are required to create Branches."
+---
+
+Friends are the foundation of private messaging in Clody. Before you can add someone to a Branch, you must be friends with them. This guide shows you how to find users, send and respond to friend requests, remove connections you no longer want, and block users who should not be able to reach you.
+
+## Find a User
+
+`POST /api/users/get`
+
+Look up any registered user by their username or numeric user ID.
+
+<ParamField body="username" type="string">
+  The target user's username.
+</ParamField>
+
+<ParamField body="id" type="number">
+  The target user's numeric ID. Supply either `username` or `id` — not both.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/users/get \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"username": "alex"}'
+```
+
+**Response:**
+
+```json
+{
+  "username": "alex",
+  "id": 42,
+  "display_name": "Alex",
+  "is_friend": false,
+  "is_enemy": false,
+  "online": true,
+  "avatar": "b2d7...4e.jpg",
+  "thought": "Enjoying the sunshine ☀️",
+  "color": "#e8a0f0",
+  "description": "Frontend developer & coffee addict"
+}
+```
+
+<Note>
+  Some users set their profile to private by disabling friend requests. If you are not already friends with them, the server returns `403 Forbidden`. You will not be able to view their profile or send them a request.
+</Note>
+
+## Send a Friend Request
+
+`POST /api/friends/send_request`
+
+<ParamField body="to" type="string" required>
+  The username of the person you want to add.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/friends/send_request \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"to": "alex"}'
+```
+
+If the request is sent successfully, the target user receives a `friend_request` Socket.IO event:
+
+```json
+{ "who": 7, "display_name": "Your Display Name" }
+```
+
+**Why might a request fail?**
+
+- The user has disabled friend requests (`accepts_friend_requests` setting).
+- You are on the user's block list.
+- You are already friends.
+- You supplied your own username.
+
+## View Your Friends and Pending Requests
+
+`GET /api/friends/get`
+
+Returns your current social graph in one call.
+
+```bash
+curl https://clody.lol/api/friends/get \
+  -b "session=<your_session_cookie>"
+```
+
+**Response:**
+
+```json
+{
+  "friends": [42, 57, 88],
+  "enemies": [13],
+  "friend_requests": [101, 204]
+}
+```
+
+<ResponseField name="friends" type="array of numbers">
+  User IDs of confirmed friends.
+</ResponseField>
+
+<ResponseField name="enemies" type="array of numbers">
+  User IDs you have blocked.
+</ResponseField>
+
+<ResponseField name="friend_requests" type="array of numbers">
+  User IDs of people who have sent you a pending friend request.
+</ResponseField>
+
+## Accept or Decline a Friend Request
+
+`POST /api/friends/request`
+
+<ParamField body="id" type="number" required>
+  The user ID of the person who sent you the request.
+</ParamField>
+
+<ParamField body="type" type="number" required>
+  `1` to accept, `0` to decline.
+</ParamField>
+
+**Accept:**
+
+```bash
+curl -X POST https://clody.lol/api/friends/request \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 101, "type": 1}'
+```
+
+When you accept, the requester receives an `accept_request` event: `{"id": <your_user_id>}`. Both users are added to each other's friends list immediately.
+
+**Decline:**
+
+```bash
+curl -X POST https://clody.lol/api/friends/request \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 101, "type": 0}'
+```
+
+The requester receives a `reject_request` event: `{"id": <your_user_id>}`.
+
+## Remove a Friend
+
+`POST /api/friends/unfriend`
+
+<ParamField body="id" type="number" required>
+  The user ID of the friend you want to remove.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/friends/unfriend \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 42}'
+```
+
+Both users are removed from each other's friends lists. No Socket.IO event is emitted — the change is silent.
+
+<Warning>
+  Removing a friend does not remove you from any shared Branches. Branch membership persists until a member leaves or the owner kicks them.
+</Warning>
+
+## Block a User
+
+`POST /api/friends/set_enemy`
+
+<ParamField body="id" type="number" required>
+  The user ID to block or unblock.
+</ParamField>
+
+<ParamField body="type" type="number" required>
+  `1` to block, `0` to unblock.
+</ParamField>
+
+**Block:**
+
+```bash
+curl -X POST https://clody.lol/api/friends/set_enemy \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 13, "type": 1}'
+```
+
+Blocking a user:
+- Removes them from your friends list (and removes you from theirs).
+- Prevents them from sending you friend requests in the future.
+- Stops them from viewing your profile.
+
+**Unblock:**
+
+```bash
+curl -X POST https://clody.lol/api/friends/set_enemy \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 13, "type": 0}'
+```
+
+Unblocking removes the restriction but does not restore the friendship — you would need to send a new friend request.
+
+## Real-Time Friend Events
+
+Friend activity arrives on the main `/` Socket.IO namespace. See [Real-Time Events](/concepts/realtime) for connection details.
+
+| Event | Payload | When it fires |
+|---|---|---|
+| `friend_request` | `{who: number, display_name: string}` | Someone sent you a friend request |
+| `accept_request` | `{id: number}` | Your friend request was accepted (`id` = your user ID) |
+| `reject_request` | `{id: number}` | Your friend request was declined (`id` = your user ID) |
+
+## Error Reference
+
+| HTTP Status | Meaning |
+|---|---|
+| `400` | Missing required field, or you tried to friend/block yourself |
+| `403` | Target user has friend requests disabled, or you are on their block list; or already friends |
+| `404` | User not found, or no pending request from that user |

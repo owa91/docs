@@ -1,0 +1,415 @@
+---
+title: "Picnic Messages API: Post and Manage Channel Content"
+sidebarTitle: "Picnic Messages"
+description: "API reference for Clody Picnic posts. Admins create, edit, and delete posts; members view them. Supports file attachments, pinning, and read tracking."
+---
+
+Picnic Messages (PMessages) are the posts that appear inside a Clody Picnic channel. Only picnic admins can create, edit, or delete posts — all members can read them. Posts support rich text content, CDN-hosted file attachments, read tracking, and a single pinned post per channel. Because authorship is hidden from regular members, admins have a dedicated endpoint to look up the real author of any post.
+
+---
+
+## The PMessage object
+
+<ResponseField name="id" type="integer">
+  Unique numeric identifier for the post.
+</ResponseField>
+
+<ResponseField name="picnic" type="integer">
+  ID of the picnic this post belongs to.
+</ResponseField>
+
+<ResponseField name="author" type="integer | null">
+  User ID of the post author. Always `null` for regular members; admins see the real ID. Use [`POST /api/pm/get_author`](#get-post-author-admins-only) to fetch the author ID directly.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Text body of the post (up to 5 000 characters).
+</ResponseField>
+
+<ResponseField name="cdn" type="array of strings">
+  List of CDN URLs for attached files or images. Up to 10 attachments per post.
+</ResponseField>
+
+<ResponseField name="edited" type="boolean">
+  `true` if the post has been edited after its original creation.
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp (seconds) when the post was created.
+</ResponseField>
+
+<ResponseField name="views" type="integer">
+  Total number of members who have marked this post as read.
+</ResponseField>
+
+<ResponseField name="read_by_me" type="boolean">
+  `true` if the authenticated user has already marked this post as read.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Reserved metadata object. Currently always `{}`.
+</ResponseField>
+
+---
+
+## Endpoints
+
+### List posts in a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/list \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"picnic": 1, "limit": 30}'
+```
+</CodeGroup>
+
+`POST /api/pm/list`
+
+Returns a paginated list of posts for a picnic, ordered from oldest to newest within the page. Use `before_id` to load earlier pages.
+
+**Request body**
+
+<ParamField body="picnic" type="integer" required>
+  ID of the picnic whose posts you want to retrieve.
+</ParamField>
+
+<ParamField body="before_id" type="integer">
+  Return only posts with an ID less than this value. Use the smallest ID from the previous page to paginate backwards in time.
+</ParamField>
+
+<ParamField body="limit" type="integer">
+  Number of posts to return. Defaults to `30`; maximum `100`.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "messages": [
+    {
+      "id": 101,
+      "picnic": 1,
+      "author": null,
+      "content": "Good morning everyone! ☀️",
+      "cdn": [],
+      "edited": false,
+      "created_at": 1718000000,
+      "views": 42,
+      "read_by_me": true,
+      "data": {}
+    }
+  ],
+  "has_more": true
+}
+```
+
+<ResponseField name="messages" type="array">
+  Array of [PMessage objects](#the-pmessage-object), in ascending chronological order.
+</ResponseField>
+
+<ResponseField name="has_more" type="boolean">
+  `true` when older posts are available. Paginate by passing the lowest `id` from the current page as `before_id`.
+</ResponseField>
+
+<Note>
+  The `author` field in each post is automatically `null` for regular members and populated with the real user ID for admins — no extra call needed when listing.
+</Note>
+
+---
+
+### Get a single post
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/get \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101}'
+```
+</CodeGroup>
+
+`POST /api/pm/get`
+
+Fetches a single post by its ID.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the post to retrieve.
+</ParamField>
+
+**Response `200`** — a [PMessage object](#the-pmessage-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
+
+---
+
+### Get post author (admins only)
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/get_author \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101}'
+```
+</CodeGroup>
+
+`POST /api/pm/get_author`
+
+Returns the real user ID of the author of a post. **Admins only.** Regular members always see `null` for the `author` field; use this endpoint when you need the explicit author ID.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the post whose author you want to identify.
+</ParamField>
+
+**Response `200`**
+
+```json
+7
+```
+
+An integer representing the author's user ID.
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of the picnic this post belongs to. |
+| `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
+
+---
+
+### Create a post (admins only)
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/create \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "picnic": 1,
+    "content": "Today'\''s update is live 🎉",
+    "cdn": ["https://cdn.clody.example.com/files/abc123.png"]
+  }'
+```
+</CodeGroup>
+
+`POST /api/pm/create`
+
+Publishes a new post to a picnic. **Admins only.**
+
+**Request body**
+
+<ParamField body="picnic" type="integer" required>
+  ID of the picnic to post in.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  Text body of the post (maximum 5 000 characters).
+</ParamField>
+
+<ParamField body="cdn" type="array of strings">
+  Up to 10 CDN URLs for file or image attachments. Defaults to an empty array if omitted.
+</ParamField>
+
+**Response `200`** — the newly created [PMessage object](#the-pmessage-object) (with `author` visible since you are an admin).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of this picnic. |
+
+<Note>
+  Every member of the picnic (including you) receives a `new_pmessage` Socket.IO event after a successful create. Admins receive the event with `author` populated; regular members receive it with `author` set to `null`.
+</Note>
+
+---
+
+### Edit a post (admins only)
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/edit \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101, "content": "Corrected content here"}'
+```
+</CodeGroup>
+
+`POST /api/pm/edit`
+
+Updates the text content of an existing post and marks it as edited. **Admins only.** CDN attachments cannot be changed after creation.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the post to edit.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  New text body (maximum 5 000 characters).
+</ParamField>
+
+**Response `200`** — the updated [PMessage object](#the-pmessage-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of this picnic. |
+| `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
+
+<Note>
+  Every member receives an `update_pmessage` Socket.IO event after a successful edit.
+</Note>
+
+---
+
+### Delete a post
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/delete \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101}'
+```
+</CodeGroup>
+
+`POST /api/pm/delete`
+
+Permanently deletes a post and all its associated comments. You can delete a post if you are a picnic admin **or** the original author of that post.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the post to delete.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are neither an admin nor the author of this post. |
+| `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
+
+<Warning>
+  Deleting a post also permanently removes all comments on that post. Every member receives a `delete_pmessage` Socket.IO event.
+</Warning>
+
+---
+
+### Mark a post as read
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/pm/mark_read \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101}'
+```
+</CodeGroup>
+
+`POST /api/pm/mark_read`
+
+Records that you have read a post. This increments the post's `views` count and sets `read_by_me` to `true` in subsequent fetches. Calling this endpoint on a post you've already read is a no-op.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the post to mark as read.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `"Not Found"` | No post exists with that ID. |
+
+---
+
+### Pin or unpin a post (admins only)
+
+<CodeGroup>
+```bash cURL
+# Pin a post
+curl https://clody.example.com/api/pm/pin_message \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101, "pin": true}'
+
+# Unpin the current post
+curl https://clody.example.com/api/pm/pin_message \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 101, "pin": false}'
+```
+</CodeGroup>
+
+`POST /api/pm/pin_message`
+
+Pins or unpins a post for the whole picnic. Each picnic can have at most one pinned post at a time. Pinning a new post automatically replaces the previous pin. **Admins only.**
+
+The pinned post ID is reflected in `data.pinned` on the [Picnic object](/api/picnics#the-picnic-object).
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the post to pin or unpin.
+</ParamField>
+
+<ParamField body="pin" type="boolean" required>
+  `true` to pin the post, `false` to unpin it.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of this picnic. |
+| `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
+
+<Note>
+  After a successful pin/unpin, every member receives an `update_picnic` Socket.IO event reflecting the updated `data.pinned` value.
+</Note>
+
+---
+
+## Socket.IO events
+
+Your client receives these events over the active Socket.IO connection when post state changes.
+
+| Event | Payload | When |
+|-------|---------|------|
+| `new_pmessage` | [PMessage object](#the-pmessage-object) | A new post is published in a picnic you belong to. |
+| `update_pmessage` | [PMessage object](#the-pmessage-object) | An existing post is edited. |
+| `delete_pmessage` | `{ "id": integer, "picnic_id": integer }` | A post is deleted. Remove it from your local state using the `id` field. |
+
+<Tip>
+  For all three events, the `author` field in the payload is personalised: admins receive the real author ID while regular members receive `null`.
+</Tip>

@@ -1,0 +1,142 @@
+---
+title: "Picnics: Public Community Broadcast Channels in Clody"
+sidebarTitle: "Picnics"
+description: "Picnics are Clody's public channels where admins post and members comment anonymously. Learn about roles, moderation, real-time events, and custom links."
+---
+
+A Picnic is a public community channel in Clody. Unlike Branches — which are private and limited to friends — anyone can find and join a Picnic. Admins broadcast posts to the entire audience; members respond through comment threads. To protect lively conversation, member comments are anonymous to other members but always visible to admins, giving your community room to speak freely while keeping moderation practical.
+
+## What Is a Picnic?
+
+Picnics are built around a broadcast model: a small group of admins writes posts, and the wider membership comments on them. Every Picnic has:
+
+- A **name** (up to 30 characters) and an optional **description** (up to 50 characters).
+- An optional **custom link** — once set, `/@/<link>` redirects anyone straight to your Picnic.
+- A **member count** visible to everyone.
+- An optional **comments** layer — controlled by the `support_comments` flag at creation or edit time.
+- A single **pinned post** slot for important announcements.
+
+You can search for Picnics by name with `POST /api/picnic/search` (`{name: string}`).
+
+## Roles
+
+<Accordion title="Owner">
+  The user who created the Picnic holds the Owner role. The owner is automatically an admin and cannot be banned or demoted.
+
+  **Owner capabilities:**
+  - Everything an Admin can do
+  - Edit Picnic name, link, description, and `support_comments` toggle via `POST /api/picnic/edit`
+  - Manage the admin list (add or remove admins, as long as the owner stays in the list)
+  - Upload the Picnic avatar (`POST /api/cdn/picnics/avatars/upload`, max 5 MB)
+  - Delete the entire Picnic via `POST /api/picnic/delete`
+</Accordion>
+
+<Accordion title="Admin">
+  Admins are appointed by the owner. There can be multiple admins. Admins drive the content.
+
+  **Admin capabilities:**
+  - Post new messages to the Picnic (`POST /api/pm/create`)
+  - Edit any Picnic post (`POST /api/pm/edit`)
+  - Delete any Picnic post (`POST /api/pm/delete`)
+  - Pin or unpin a post (`POST /api/pm/pin_message`)
+  - Upload files to the Picnic CDN (`POST /api/cdn/picnics/upload`, max 30 MB)
+  - Ban and unban members (`POST /api/picnic/ban` / `POST /api/picnic/unban`)
+  - View the real author behind any anonymous comment or post
+  - Access the management panel (`POST /api/picnic/manage`) — returns members, admins, owner, and bans
+</Accordion>
+
+<Accordion title="Member">
+  Anyone who has joined the Picnic and has not been banned is a member.
+
+  **Member capabilities:**
+  - View all posts and comment threads
+  - Post comments on posts (when `support_comments` is enabled)
+  - Mark posts as read (`POST /api/pm/mark_read`)
+  - Leave the Picnic (`POST /api/picnic/leave`)
+
+  **Anonymity:** Members see comments from other members without author attribution. Only admins see who wrote each comment.
+</Accordion>
+
+## Creating a Picnic
+
+```bash
+curl -X POST https://clody.lol/api/picnic/create \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{
+    "name": "Clody Updates",
+    "link": "clody-updates",
+    "description": "Official announcements",
+    "support_comments": true
+  }'
+```
+
+<Note>You must have fewer than three active warnings on your account to create a Picnic.</Note>
+
+## Joining a Picnic
+
+Any logged-in user can join an existing Picnic with `POST /api/picnic/join`:
+
+```bash
+curl -X POST https://clody.lol/api/picnic/join \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 7}'
+```
+
+The server responds with the Picnic object and emits an `added_picnic` Socket.IO event to your session.
+
+## Custom Links
+
+Setting a `link` on your Picnic (up to 30 characters, must be unique) lets users navigate to `/@/<link>` and be redirected to the Picnic page automatically. You can add or change the link at any time from `POST /api/picnic/edit` (owner only).
+
+## Comment Threads
+
+When `support_comments` is `true`, members can post comments on individual messages. If you later set `support_comments` to `false` via `POST /api/picnic/edit`, the comments column is cleared and new comments are blocked.
+
+Comments are anonymous from the members' perspective. Admins can always identify the comment author.
+
+## Pinned Message
+
+Admins can pin any single post so it surfaces prominently to members. Pinning and unpinning both use `POST /api/pm/pin_message`:
+
+```bash
+curl -X POST https://clody.lol/api/pm/pin_message \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 88, "pin": true}'
+```
+
+The updated Picnic object (including the new `pinned` field in `data`) is broadcast via `update_picnic` to all members.
+
+## Moderation
+
+Admins can ban members with `POST /api/picnic/ban` by supplying the Picnic ID and the target member's user ID. A banned user:
+
+- Is removed from the member list immediately.
+- Receives a system notification and a `banned_from_picnic` Socket.IO event.
+- Can still read existing posts but cannot join, post, or comment.
+- Cannot be re-admitted until an admin calls `POST /api/picnic/unban`.
+
+<Warning>
+  You cannot ban the Picnic owner. You also cannot ban a user who currently holds an admin role — remove the admin role first via `POST /api/picnic/edit`.
+</Warning>
+
+## Real-Time Events
+
+All Picnic activity arrives through the Socket.IO `/` namespace. See [Real-Time Events](/concepts/realtime) for connection details.
+
+| Event | Payload | When it fires |
+|---|---|---|
+| `added_picnic` | Picnic object | You joined or created a Picnic |
+| `update_picnic` | Picnic object | Settings changed, a post was pinned, or the avatar updated |
+| `new_pmessage` | Message object | A new post was published |
+| `update_pmessage` | Message object | A post was edited |
+| `delete_pmessage` | `{id, picnic_id}` | A post was deleted (along with its comments) |
+| `new_comment` | Comment object | A new comment was posted |
+| `update_comment` | Comment object | A comment was edited |
+| `delete_comment` | `{id, message}` | A comment was deleted |
+| `new_reaction` | Reaction object | An emoji reaction was added |
+| `delete_reaction` | Reaction object | An emoji reaction was removed |
+| `banned_from_picnic` | `{id, name}` | You were banned from the Picnic |
+| `deleted_picnic` | `{id}` | The Picnic was deleted by its owner |

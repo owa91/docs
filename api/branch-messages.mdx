@@ -1,0 +1,424 @@
+---
+title: "Branch Messages API: Send and Manage Chat Messages"
+sidebarTitle: "Branch Messages"
+description: "API reference for sending, listing, editing, deleting, and marking as read messages in Clody Branches. Supports replies, file attachments, and pagination."
+---
+
+Branch Messages (BMessages) are the individual chat messages that live inside a Clody Branch. You can send plain text, attach up to 10 CDN-hosted files, and reply directly to previous messages. All endpoints require an authenticated, verified session cookie — unauthenticated requests return `400 "Not Authorized"`. You must be a member of the branch to interact with its messages.
+
+<Note>
+  **Attachment uploads:** Before referencing files in the `cdn` field, upload them via `POST /api/cdn/benches/upload`. Use the returned filenames when creating or referencing messages.
+</Note>
+
+---
+
+## Message Object
+
+Every message endpoint returns messages in the following shape:
+
+<ResponseField name="id" type="integer">
+  Unique identifier of the message.
+</ResponseField>
+
+<ResponseField name="branch" type="integer">
+  ID of the branch this message belongs to.
+</ResponseField>
+
+<ResponseField name="author" type="integer">
+  User ID of the member who sent the message.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Text body of the message. Maximum 5 000 characters.
+</ResponseField>
+
+<ResponseField name="cdn" type="array of strings">
+  List of uploaded filenames attached to this message. Maximum 10 entries.
+</ResponseField>
+
+<ResponseField name="edited" type="boolean">
+  `true` if the message has been edited after its initial creation.
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp (seconds) when the message was created.
+</ResponseField>
+
+<ResponseField name="read" type="array of integers">
+  List of user IDs who have marked this message as read.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Additional metadata. Contains a single field:
+  - `answer_to` (`integer | null`) — the ID of the message this message is a reply to, or `null` if it is not a reply.
+</ResponseField>
+
+---
+
+## POST /api/bm/list
+
+Retrieve a paginated list of messages for a given branch. Each page is returned in oldest-to-newest order. The **first call** (without `before_id`) returns the most recent messages in the branch. To page further back in history, pass `before_id` — the server returns only messages whose `id` is strictly less than that value, so each call walks backward toward older content.
+
+### Request Body
+
+<ParamField body="branch" type="integer" required>
+  The ID of the branch whose messages you want to list.
+</ParamField>
+
+<ParamField body="before_id" type="integer">
+  Pagination cursor. The response will only include messages with an `id` strictly less than this value (i.e., messages older than the one with this ID). Omit on the first request to fetch the most recent messages.
+</ParamField>
+
+<ParamField body="limit" type="integer">
+  Maximum number of messages to return per page. Defaults to `30`, capped at `100`.
+</ParamField>
+
+<Tip>
+  Check `has_more` in the response to determine whether additional pages exist. If `true`, call again with `before_id` set to the `id` of the **oldest** (first) message in the current page to load the next batch of older messages.
+</Tip>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/bm/list \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "branch": 4, "limit": 20 }'
+```
+
+### Example Response
+
+```json
+{
+  "messages": [
+    {
+      "id": 88,
+      "branch": 4,
+      "author": 101,
+      "content": "Hey, how are you?",
+      "cdn": [],
+      "edited": false,
+      "created_at": 1717990000,
+      "read": [101, 202],
+      "data": { "answer_to": null }
+    },
+    {
+      "id": 91,
+      "branch": 4,
+      "author": 202,
+      "content": "Doing great, thanks!",
+      "cdn": [],
+      "edited": false,
+      "created_at": 1717990120,
+      "read": [202],
+      "data": { "answer_to": 88 }
+    }
+  ],
+  "has_more": false
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `branch` was not provided. |
+| `403` | `"Forbidden"` | You are not a member of this branch. |
+
+---
+
+## POST /api/bm/get
+
+Fetch a single message by its ID. You must be a member of the branch that contains the message.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the message to retrieve.
+</ParamField>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/bm/get \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 91 }'
+```
+
+### Example Response
+
+```json
+{
+  "id": 91,
+  "branch": 4,
+  "author": 202,
+  "content": "Doing great, thanks!",
+  "cdn": [],
+  "edited": false,
+  "created_at": 1717990120,
+  "read": [202],
+  "data": { "answer_to": 88 }
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` was not provided. |
+| `403` | `"Forbidden"` | You are not a member of the branch that contains this message. |
+| `404` | `"Not Found"` | No message exists with the given ID. |
+
+---
+
+## POST /api/bm/create
+
+Send a new message to a branch. You must be a member of the branch. Optionally attach files or reply to a previous message.
+
+### Request Body
+
+<ParamField body="branch" type="integer" required>
+  The ID of the branch to send the message to.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The text content of the message. Maximum 5 000 characters.
+</ParamField>
+
+<ParamField body="cdn" type="array of strings">
+  Filenames of files to attach, as returned by `/api/cdn/benches/upload`. Maximum 10 items.
+</ParamField>
+
+<ParamField body="answer_to" type="integer">
+  ID of the message this message is replying to. The referenced message must exist within the same branch.
+</ParamField>
+
+<Warning>
+  `content` is required and must not exceed 5 000 characters. `cdn` must not contain more than 10 filenames. Violating either limit returns `400 "Bad Request"`.
+</Warning>
+
+### Example Request — Plain Message
+
+```bash
+curl https://your-clody-instance.com/api/bm/create \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "branch": 4,
+    "content": "Here are the updated designs!"
+  }'
+```
+
+### Example Request — Reply with Attachment
+
+```bash
+curl https://your-clody-instance.com/api/bm/create \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "branch": 4,
+    "content": "See the attached file for context.",
+    "cdn": ["a1b2c3d4_mockup_v2.png"],
+    "answer_to": 91
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": 95,
+  "branch": 4,
+  "author": 101,
+  "content": "See the attached file for context.",
+  "cdn": ["a1b2c3d4_mockup_v2.png"],
+  "edited": false,
+  "created_at": 1718001000,
+  "read": [],
+  "data": { "answer_to": 91 }
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `branch` or `content` is missing, `cdn` has more than 10 items, or `content` exceeds 5 000 characters. |
+| `403` | `"Forbidden"` | You are not a member of this branch. |
+| `404` | `"Not Found"` | The `answer_to` message does not exist or belongs to a different branch. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `new_bmessage` | Message object | Fired on every branch member's socket when a new message is sent. |
+
+---
+
+## POST /api/bm/edit
+
+Edit the text content of a message you authored. Only the original author can edit a message. On success, `edited` is set to `true` in the returned object.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the message to edit.
+</ParamField>
+
+<ParamField body="new_content" type="string" required>
+  The replacement text content. Maximum 5 000 characters.
+</ParamField>
+
+<Note>
+  Editing a message updates its `content` and sets `edited: true`. The `created_at` timestamp and CDN attachments are not changed.
+</Note>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/bm/edit \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 95, "new_content": "See the attached file — updated link below." }'
+```
+
+### Example Response
+
+```json
+{
+  "id": 95,
+  "branch": 4,
+  "author": 101,
+  "content": "See the attached file — updated link below.",
+  "cdn": ["a1b2c3d4_mockup_v2.png"],
+  "edited": true,
+  "created_at": 1718001000,
+  "read": [],
+  "data": { "answer_to": 91 }
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` or `new_content` is missing, or `new_content` exceeds 5 000 characters. |
+| `403` | `"Forbidden"` | You are not the author of this message. |
+| `404` | `"Not Found"` | No message exists with the given ID. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `update_bmessage` | Message object | Fired on every branch member's socket when a message is edited. |
+
+---
+
+## POST /api/bm/delete
+
+Permanently delete a message you authored. Once deleted, the message cannot be recovered.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the message to delete.
+</ParamField>
+
+<Warning>
+  Deletion is permanent. All branch members receive a `delete_bmessage` event immediately.
+</Warning>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/bm/delete \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 95 }'
+```
+
+### Example Response
+
+```json
+"Success"
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` was not provided. |
+| `403` | `"Forbidden"` | You are not the author of this message. |
+| `404` | `"Not Found"` | No message exists with the given ID. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `delete_bmessage` | `{ "id": <message_id>, "branch_id": <branch_id> }` | Fired on every branch member's socket when a message is deleted. |
+
+---
+
+## POST /api/bm/mark_read
+
+Mark a message as read by the current user. This appends your user ID to the message's `read` array. If you have already marked the message as read, the call is a no-op and still returns `200`.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the message to mark as read.
+</ParamField>
+
+<Tip>
+  Call this endpoint whenever a message becomes visible in your UI to keep read receipts accurate. The updated message is broadcast to all branch members via `update_bmessage`.
+</Tip>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/bm/mark_read \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 91 }'
+```
+
+### Example Response
+
+```json
+"Success"
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` was not provided. |
+| `403` | `"Forbidden"` | You are not a member of the branch that contains this message. |
+| `404` | `"Not Found"` | No message exists with the given ID. |
+
+### Socket.IO Events Emitted
+
+When the read status changes (i.e., you were not already in `read`), every branch member receives:
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `update_bmessage` | Message object | Fired on every branch member's socket with the updated `read` array. |
+
+---
+
+## Socket.IO Event Reference
+
+Subscribe to these events on your Socket.IO client to receive real-time message updates without polling.
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `new_bmessage` | Message object | A new message was sent in a branch you belong to. |
+| `update_bmessage` | Message object | A message was edited or its `read` array changed (someone marked it as read). |
+| `delete_bmessage` | `{ "id": integer, "branch_id": integer }` | A message was deleted from a branch you belong to. |

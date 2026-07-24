@@ -1,0 +1,206 @@
+---
+title: "Clody Quickstart: Register, Log In, and Send a Message"
+sidebarTitle: "Quickstart"
+description: "Step-by-step guide to creating a Clody account, completing two-step login with email verification, and sending your first message in minutes."
+---
+
+This guide walks you through everything you need to get up and running with Clody: creating an account, logging in with email verification, checking your session, creating a Branch, and sending your first message. By the end you'll have a working session cookie and a message in a chat.
+
+<Note>
+  All examples use curl. Replace `https://your-clody-server` with the base URL of the Clody instance you're working with. Persist your cookies across requests with `--cookie-jar cookies.txt --cookie cookies.txt`.
+</Note>
+
+<Steps>
+  <Step title="Register an account">
+    Create your Clody account by posting your chosen username, a password, and a Google reCAPTCHA v2 token to `/api/register`. The reCAPTCHA token must come from a reCAPTCHA v2 widget rendered in a browser — you cannot generate it server-side.
+
+    ```bash
+    curl -s -X POST https://your-clody-server/api/register \
+      -H "Content-Type: application/json" \
+      -c cookies.txt \
+      -d '{
+        "username": "yourname",
+        "password": "s3cur3P@ssword",
+        "token": "03AGdBq2...reCAPTCHA-token..."
+      }'
+    ```
+
+    **Success response (`200`):**
+    ```json
+    "Success"
+    ```
+
+    **Possible errors:**
+    | Status | Body | Meaning |
+    |--------|------|---------|
+    | 403 | `"Username is taken"` | Choose a different username. |
+    | 403 | `"You are bot"` | reCAPTCHA verification failed — obtain a fresh token. |
+    | 400 | `"Bad Request"` | A required field is missing or empty. |
+
+    After a successful registration, Clody sets a session cookie and logs you in immediately. Your account starts in an *unverified* state — you must link and verify an email address before most other endpoints become available.
+  </Step>
+
+  <Step title="Request a login code">
+    On subsequent logins, Clody uses a two-step email-code flow. First, submit your username and password. Clody validates your credentials and sends a 4-digit code to your verified email address.
+
+    ```bash
+    curl -s -X POST https://your-clody-server/api/verification/login \
+      -H "Content-Type: application/json" \
+      -c cookies.txt \
+      -d '{
+        "username": "yourname",
+        "password": "s3cur3P@ssword"
+      }'
+    ```
+
+    **Success response (`200`) when email is linked:**
+    ```json
+    {
+      "email_hint": "y***e@example.com",
+      "expires_in": 600
+    }
+    ```
+
+    The `email_hint` is a partially masked version of your email so you know where to look. The code expires in 600 seconds (10 minutes). If you haven't linked an email yet, the response is `{"logged_in": true, "needs_email": true}` and you're signed in directly — go to [Step 4](#step-4-check-your-session) and then link your email via the verification flow.
+  </Step>
+
+  <Step title="Confirm the code and get your session cookie">
+    Check your inbox for the 4-digit code Clody sent you, then submit it along with your username to `/api/login`. On success, Clody sets your session cookie.
+
+    ```bash
+    curl -s -X POST https://your-clody-server/api/login \
+      -H "Content-Type: application/json" \
+      -b cookies.txt -c cookies.txt \
+      -d '{
+        "username": "yourname",
+        "code": "4827"
+      }'
+    ```
+
+    **Success response (`200`):**
+    ```json
+    "Success"
+    ```
+
+    The session cookie is `HttpOnly` and `Secure`, with a 30-day lifetime. Pass `-b cookies.txt -c cookies.txt` to every subsequent curl request to reuse it automatically.
+
+    <Warning>
+      You have a maximum of 5 attempts to enter the correct code. After 5 failures the code is invalidated and you must request a new one. There is a 60-second cooldown between code requests.
+    </Warning>
+  </Step>
+
+  <Step title="Check your session">
+    Verify that your cookie is valid and your account is fully verified before making other API calls.
+
+    ```bash
+    curl -s https://your-clody-server/api/session \
+      -b cookies.txt
+    ```
+
+    **Response:**
+    ```json
+    {
+      "authenticated": true,
+      "verified": true,
+      "username": "yourname"
+    }
+    ```
+
+    | Field | Type | Meaning |
+    |-------|------|---------|
+    | `authenticated` | boolean | `true` if the session cookie is valid. |
+    | `verified` | boolean | `true` if you have a linked, verified email address. |
+    | `username` | string | Your account username. |
+
+    If `verified` is `false`, complete the email-verification flow described in the [Authentication guide](/authentication#email-verification) before proceeding.
+  </Step>
+
+  <Step title="Create a Branch">
+    Branches are private chats. You can create a direct message (DM) or a group chat with any of your friends. Set `ispm` to `true` for a DM, or `false` for a named group.
+
+    ```bash
+    curl -s -X POST https://your-clody-server/api/branch/create \
+      -H "Content-Type: application/json" \
+      -b cookies.txt -c cookies.txt \
+      -d '{
+        "members": [42],
+        "name": "Weekend plans",
+        "ispm": false
+      }'
+    ```
+
+    **Success response (`200`):**
+    ```json
+    {
+      "id": 7,
+      "name": "Weekend plans",
+      "members": [1, 42],
+      "ispm": false,
+      "owner": 1,
+      "data": null
+    }
+    ```
+
+    Note the `id` field — you'll use it as the `branch` value when sending messages. All listed `members` must already be on your friends list; otherwise the request returns `403 "Anybody isn't friend"`.
+  </Step>
+
+  <Step title="Send a message">
+    Post a message to the Branch you just created. The `branch` field is the Branch `id` from the previous step. The `content` field supports up to 5,000 characters.
+
+    ```bash
+    curl -s -X POST https://your-clody-server/api/bm/create \
+      -H "Content-Type: application/json" \
+      -b cookies.txt -c cookies.txt \
+      -d '{
+        "branch": 7,
+        "content": "Hey, this is my first Clody message!",
+        "cdn": []
+      }'
+    ```
+
+    **Success response (`200`):**
+    ```json
+    {
+      "id": 101,
+      "branch": 7,
+      "author": 1,
+      "content": "Hey, this is my first Clody message!",
+      "cdn": [],
+      "edited": false,
+      "created_at": 1718000000,
+      "read": null,
+      "data": { "answer_to": null }
+    }
+    ```
+
+    All Branch members receive a `new_bmessage` Socket.IO event carrying this same payload in real time.
+  </Step>
+</Steps>
+
+## Email verification note
+
+After registering, your account's `verified` status is `false` until you link an email address. Almost every API route checks for a verified session and returns `400 "Not Authorized"` if you haven't completed verification. To link your email:
+
+1. Call `POST /api/verification/set_email` with `{"email": "you@example.com"}`.
+2. Check your inbox for the 4-digit code.
+3. Confirm with `POST /api/verification` with `{"code": "XXXX"}`.
+
+See the full [Authentication guide](/authentication#email-verification) for details.
+
+## Tips and common gotchas
+
+<Tip>
+  Always save your cookies between requests. In curl, use both `-b cookies.txt` (read) and `-c cookies.txt` (write) so your session persists across commands.
+</Tip>
+
+<Tip>
+  The reCAPTCHA token for `/api/register` can only be generated from a browser-rendered reCAPTCHA v2 widget. It is single-use and expires quickly — generate it immediately before calling the endpoint.
+</Tip>
+
+<Warning>
+  You cannot create a Branch with users who are not on your friends list. Make sure you've sent and received a friend request before calling `/api/branch/create`.
+</Warning>
+
+<Note>
+  All POST endpoints expect `Content-Type: application/json`. Sending form-encoded data will result in a `400 Bad Request`. The only exception is file upload endpoints, which use `multipart/form-data`.
+</Note>

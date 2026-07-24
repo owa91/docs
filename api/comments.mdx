@@ -1,0 +1,367 @@
+---
+title: "Comments API: Threaded Replies on Clody Picnic Posts"
+sidebarTitle: "Comments"
+description: "API reference for Clody Picnic comments. Members leave threaded replies on posts, like comments, and edit or delete their own contributions."
+---
+
+Comments let picnic members start threaded discussions beneath individual posts. They are only available on picnics where the owner has enabled the `supports_comments` flag — attempting to list or create comments on a picnic without this flag returns a `403`. Any member can post a comment, reply to another comment, like or unlike comments, and edit or delete their own contributions. Picnic admins can also delete any member's comment for moderation purposes.
+
+---
+
+## The Comment object
+
+<ResponseField name="id" type="integer">
+  Unique numeric identifier for the comment.
+</ResponseField>
+
+<ResponseField name="picnic" type="integer">
+  ID of the picnic this comment belongs to.
+</ResponseField>
+
+<ResponseField name="message" type="integer">
+  ID of the picnic post (`PMessage`) this comment is attached to.
+</ResponseField>
+
+<ResponseField name="author" type="integer | null">
+  The real user ID of the commenter, or `null` if the author has set their profile to private and you are not their friend. You always see the real user ID on your own comments, on comments by users with public profiles, and on comments by users who are your friends.
+</ResponseField>
+
+<ResponseField name="content" type="string">
+  Text body of the comment.
+</ResponseField>
+
+<ResponseField name="answer_to" type="integer | null">
+  ID of the parent comment this comment is replying to, or `null` for top-level comments.
+</ResponseField>
+
+<ResponseField name="created_at" type="integer">
+  Unix timestamp (seconds) when the comment was created.
+</ResponseField>
+
+<ResponseField name="edited" type="boolean">
+  `true` if the comment has been edited after its original creation.
+</ResponseField>
+
+<ResponseField name="likes" type="integer">
+  Total number of likes this comment has received.
+</ResponseField>
+
+<ResponseField name="liked_by_me" type="boolean">
+  `true` if the authenticated user has liked this comment.
+</ResponseField>
+
+<Note>
+  The `author` field reflects the commenter's privacy settings. Users with public profiles (the default) are always identified by their real user ID. Users with private profiles appear as `null` to non-friends. You always see the real user ID on your own comments regardless of your privacy setting.
+</Note>
+
+---
+
+## Endpoints
+
+### List comments on a post
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/comment/list \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": 101, "limit": 20}'
+```
+</CodeGroup>
+
+`POST /api/comment/list`
+
+Returns a paginated list of comments for a specific post, ordered from newest to oldest. Use `before_id` to load earlier pages.
+
+**Request body**
+
+<ParamField body="message" type="integer" required>
+  ID of the picnic post (`PMessage`) whose comments you want to retrieve.
+</ParamField>
+
+<ParamField body="before_id" type="integer">
+  Return only comments with an ID less than this value. Pass the smallest `id` from the previous response to paginate.
+</ParamField>
+
+<ParamField body="limit" type="integer">
+  Number of comments to return. Defaults to `20`; maximum `50`.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "comments": [
+    {
+      "id": 55,
+      "picnic": 1,
+      "message": 101,
+      "author": 8849201,
+      "content": "Great post, thanks!",
+      "answer_to": null,
+      "created_at": 1718001000,
+      "edited": false,
+      "likes": 3,
+      "liked_by_me": false
+    }
+  ],
+  "has_more": false
+}
+```
+
+<ResponseField name="comments" type="array">
+  Array of [Comment objects](#the-comment-object).
+</ResponseField>
+
+<ResponseField name="has_more" type="boolean">
+  `true` when older comments are available. Paginate by passing the smallest `id` from this page as `before_id`.
+</ResponseField>
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Comments are disabled"` | This picnic does not have comments enabled. |
+| `404` | `"Not Found"` | The post or its picnic does not exist. |
+
+---
+
+### Get a single comment
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/comment/get \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 55}'
+```
+</CodeGroup>
+
+`POST /api/comment/get`
+
+Fetches a single comment by its ID.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the comment to retrieve.
+</ParamField>
+
+**Response `200`** — a [Comment object](#the-comment-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `"Not Found"` | No comment exists with that ID. |
+
+---
+
+### Create a comment
+
+<CodeGroup>
+```bash cURL
+# Top-level comment
+curl https://clody.example.com/api/comment/create \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": 101, "content": "Love this update!"}'
+
+# Reply to an existing comment
+curl https://clody.example.com/api/comment/create \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": 101, "content": "Agreed!", "answer_to": 55}'
+```
+</CodeGroup>
+
+`POST /api/comment/create`
+
+Posts a new comment on a picnic post. You must be a member of the picnic and comments must be enabled.
+
+**Request body**
+
+<ParamField body="message" type="integer" required>
+  ID of the picnic post to comment on.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  Text body of the comment. Cannot be blank or whitespace-only.
+</ParamField>
+
+<ParamField body="answer_to" type="integer">
+  ID of the comment you are replying to. The referenced comment must belong to the same post. Omit for a top-level comment.
+</ParamField>
+
+**Response `200`** — the newly created [Comment object](#the-comment-object) with your real user ID in the `author` field.
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Comments are disabled"` | The picnic does not have comments enabled. |
+| `403` | `"You are banned"` | You are banned from this picnic. |
+| `403` | `"You need to be member to send comments"` | You have not joined this picnic. |
+| `404` | `"Message has not found"` | The target post or picnic does not exist. |
+| `404` | `"Not Found"` | The `answer_to` comment does not exist or belongs to a different post. |
+
+<Note>
+  After a successful create, every member of the picnic receives a `new_comment` Socket.IO event. Each member's payload has the `author` field personalised — your real ID for your own event copy, an anonymised ID for everyone else.
+</Note>
+
+---
+
+### Edit a comment
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/comment/edit \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 55, "content": "Love this update — especially the new design!"}'
+```
+</CodeGroup>
+
+`POST /api/comment/edit`
+
+Updates the text of one of your comments and marks it as edited. You can only edit comments you authored.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the comment to edit.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  Replacement text for the comment. Cannot be blank or whitespace-only.
+</ParamField>
+
+**Response `200`** — the updated [Comment object](#the-comment-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not the author of this comment. |
+| `404` | `"Not Found"` | No comment exists with that ID. |
+
+<Note>
+  Every member of the picnic receives an `update_comment` Socket.IO event after a successful edit.
+</Note>
+
+---
+
+### Delete a comment
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/comment/delete \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 55}'
+```
+</CodeGroup>
+
+`POST /api/comment/delete`
+
+Permanently deletes a comment. You can delete your own comment at any time. Picnic admins can delete any member's comment for moderation purposes.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the comment to delete.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are neither the comment author nor a picnic admin. |
+| `404` | `"Not Found"` | No comment exists with that ID. |
+
+<Note>
+  Every member of the picnic receives a `delete_comment` Socket.IO event after a successful deletion.
+</Note>
+
+---
+
+### Like or unlike a comment
+
+<CodeGroup>
+```bash cURL
+# Like a comment
+curl https://clody.example.com/api/comment/like \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 55, "type": 1}'
+
+# Unlike a comment
+curl https://clody.example.com/api/comment/like \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 55, "type": 0}'
+```
+</CodeGroup>
+
+`POST /api/comment/like`
+
+Adds or removes your like from a comment. Liking a comment you have already liked, or unliking one you haven't, is a safe no-op.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the comment to like or unlike.
+</ParamField>
+
+<ParamField body="type" type="integer" required>
+  `1` to like the comment, `0` to unlike it.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "likes": 4,
+  "liked_by_me": true
+}
+```
+
+<ResponseField name="likes" type="integer">
+  Updated total like count for the comment.
+</ResponseField>
+
+<ResponseField name="liked_by_me" type="boolean">
+  `true` if you now have an active like on this comment.
+</ResponseField>
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `"Not Found"` | No comment exists with that ID. |
+
+---
+
+## Socket.IO events
+
+Your client receives these events over the active Socket.IO connection when comment state changes.
+
+| Event | Payload | When |
+|-------|---------|------|
+| `new_comment` | [Comment object](#the-comment-object) | A new comment is posted on any post in a picnic you belong to. |
+| `update_comment` | [Comment object](#the-comment-object) | An existing comment is edited. |
+| `delete_comment` | `{ "id": integer, "message": integer }` | A comment is deleted. Use `id` to remove it from your local state and `message` to identify which post it belonged to. |
+
+<Tip>
+  The `author` field in `new_comment` and `update_comment` payloads is personalised per recipient — each member sees `null` or the real user ID depending on the author's privacy settings and whether they are friends, while the comment's own author always receives their real user ID.
+</Tip>

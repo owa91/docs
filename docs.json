@@ -1,0 +1,94 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "name": "Clody",
+  "theme": "luma",
+  "colors": {
+    "primary": "#6C8EF5",
+    "light": "#EEF2FF",
+    "dark": "#1A1F3C"
+  },
+  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/owa91/Clody"
+    }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/branches",
+              "concepts/picnics",
+              "concepts/realtime"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/messaging",
+              "guides/voice-calls",
+              "guides/media-uploads",
+              "guides/friends"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Auth & Users",
+            "pages": [
+              "api/auth",
+              "api/users",
+              "api/settings"
+            ]
+          },
+          {
+            "group": "Branches",
+            "pages": [
+              "api/branches",
+              "api/branch-messages"
+            ]
+          },
+          {
+            "group": "Picnics",
+            "pages": [
+              "api/picnics",
+              "api/picnic-messages",
+              "api/comments"
+            ]
+          },
+          {
+            "group": "Interactions",
+            "pages": [
+              "api/reactions",
+              "api/gifs",
+              "api/cdn"
+            ]
+          },
+          {
+            "group": "Real-Time",
+            "pages": [
+              "api/voice-calls",
+              "api/websocket-events"
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,61 @@
+---
+title: "Clody Platform Overview: Core Concepts and How It Works"
+sidebarTitle: "Introduction"
+description: "Clody is a real-time messaging platform with Branches for private chats, Picnics for community channels, voice calls, reactions, and GIF support."
+---
+
+Clody is a real-time messaging platform. The API gives you programmatic access to the same capabilities the web client uses — creating private chats, posting to community channels, reacting to messages, uploading files, and more. Every feature is available over standard HTTP endpoints plus a persistent Socket.IO connection for live events.
+
+## Key concepts
+
+<CardGroup cols={2}>
+  <Card title="Branches" icon="code-branch">
+    Branches are private chats — one-on-one DMs or small group conversations. You can only create a Branch with people already on your friends list, and only Branch members can read or post messages inside it.
+  </Card>
+  <Card title="Picnics" icon="people-group">
+    Picnics are public community channels. Any verified user can search for Picnics, join them, and start posting. Picnic owners and admins can moderate members, manage bans, and optionally enable threaded comments on posts.
+  </Card>
+  <Card title="Real-Time Events" icon="bolt">
+    Once you open a Socket.IO connection, Clody pushes events to you instantly — new messages, reactions, branch membership changes, call invites, and more. No polling required.
+  </Card>
+  <Card title="Friends" icon="user-group">
+    The friends system is the social backbone of Clody. You must be friends with someone before you can add them to a Branch. You can send friend requests, accept or decline incoming requests, and block users you don't want to hear from.
+  </Card>
+</CardGroup>
+
+## How the API works
+
+Clody's HTTP API follows a straightforward set of conventions you'll use across every endpoint.
+
+**Session cookies.** After you log in, Clody sets an HttpOnly session cookie in your browser. Every subsequent request must include that cookie — the server uses it to identify you. Browsers send cookies automatically, so in most cases you just need to set `credentials: 'include'` in `fetch` calls (or `--cookie-jar` in curl).
+
+**JSON everywhere.** All POST request bodies must be `Content-Type: application/json`. Responses are always JSON as well. The only exception is file uploads, which use `multipart/form-data`.
+
+**Socket.IO for live updates.** Clody uses Socket.IO for real-time delivery. Connect once after login and you'll receive events for everything happening in your Branches and Picnics without polling the API.
+
+**Email verification gate.** Your account must have a verified email address before most API routes will respond successfully. Immediately after registration you'll be in an *unverified* state — check `GET /api/session` and look at the `verified` field to confirm your status, then complete the email-verification flow if needed.
+
+<Note>
+  The `GET /api/session` endpoint always returns HTTP 200, even when you're not logged in. A `false` value for `authenticated` is an expected answer, not an error.
+</Note>
+
+## Rate limits
+
+Clody enforces per-client rate limits to keep the platform stable. The client key is your user ID when you're authenticated, or your IP address when you're not.
+
+| Route pattern | Limit |
+|---|---|
+| Default (all routes) | 200 requests / minute, burst of 60 |
+| `POST /api/login` | 10 requests / minute, burst of 5 |
+| `POST /api/register` | 5 requests / minute, burst of 3 |
+| `POST /api/verification/login` | 5 requests / minute, burst of 3 |
+| `POST /api/verification/set_email` | 5 requests / minute, burst of 3 |
+| `POST /api/verification` | 10 requests / minute, burst of 5 |
+| GIF search | 60 requests / minute, burst of 20 |
+| Reactions | 60 requests / minute, burst of 20 |
+
+When you exceed a limit, the server responds with `HTTP 429` and a `Retry-After` header telling you how many seconds to wait before retrying.
+
+## Next steps
+
+Ready to make your first request? Head to the [Quickstart](/quickstart) to register an account, log in, and send a message in a few minutes.

@@ -1,0 +1,130 @@
+---
+title: "GIFs API: Search and Attach Animated GIFs in Clody"
+sidebarTitle: "GIFs"
+description: "Search Giphy for animated GIFs to attach in Clody Branch messages. Returns preview and full URLs ready for use with the CDN attachment endpoint."
+---
+
+Clody gives you a built-in GIF picker backed by the Giphy library. You search for a GIF using this API, get back a list of results with preview and full-resolution URLs, and then register the chosen URL with the CDN endpoint to receive a filename you can attach to a Branch message.
+
+<Note>
+  GIFs in Clody are powered by [Giphy](https://giphy.com). All results are filtered to a **PG-13** rating and sourced from the `messaging_non_clips` bundle, which excludes video clips and keeps responses lightweight.
+</Note>
+
+---
+
+## Endpoints
+
+### Search GIFs — `POST /api/gifs/search`
+
+Searches Giphy for animated GIFs matching your query. Returns up to 24 results. If you omit the query or send an empty string, the endpoint returns the current Giphy trending feed instead — great for the default state of your GIF picker.
+
+**Request body**
+
+<ParamField body="q" type="string">
+  Search query, e.g. `"celebration"`. Omit this field or pass an empty string to retrieve trending GIFs.
+</ParamField>
+
+**Response `200`** — array of GIF objects.
+
+<ResponseField name="id" type="string">
+  Giphy's unique identifier for the GIF.
+</ResponseField>
+
+<ResponseField name="preview" type="string">
+  URL of a small, lower-resolution version suitable for grid thumbnails and previews.
+</ResponseField>
+
+<ResponseField name="url" type="string">
+  URL of the full-quality GIF. Pass this value to `POST /api/cdn/benches/gif` to attach it to a message.
+</ResponseField>
+
+```json
+[
+  {
+    "id": "l0MYt5jPR6QX5pnqM",
+    "preview": "https://media2.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy-preview.gif",
+    "url": "https://media2.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif"
+  }
+]
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `503`  | The Giphy API key is not configured on this server. |
+| `502`  | The Giphy service is temporarily unavailable. |
+
+---
+
+## Attaching a GIF to a Branch Message
+
+Once you have picked a GIF from the search results, attach it to a message in two steps.
+
+**Step 1 — Register the GIF with the CDN**
+
+```bash
+curl -X POST https://clody.lol/api/cdn/benches/gif \
+  -H "Content-Type: application/json" \
+  -b "session=<your-session-cookie>" \
+  -d '{
+    "id_bench": 12,
+    "url": "https://media2.giphy.com/media/l0MYt5jPR6QX5pnqM/giphy.gif"
+  }'
+```
+
+Response:
+
+```json
+{ "filename": "a3f8c2d1e4b5607f9a0e1d2c3b4a5f67.gif" }
+```
+
+<Warning>
+  `POST /api/cdn/benches/gif` only accepts URLs whose hostname is `giphy.com` or a `*.giphy.com` subdomain. Passing any other URL returns `400 Bad Request`.
+</Warning>
+
+**Step 2 — Include the filename when creating the message**
+
+Pass the returned `filename` in the `cdn` array of your `POST /api/bm/create` request body alongside any other attachments.
+
+---
+
+## Full Example: Search Then Attach
+
+```bash
+# 1. Search for a GIF
+curl -s -X POST https://clody.lol/api/gifs/search \
+  -H "Content-Type: application/json" \
+  -b "session=<your-session-cookie>" \
+  -d '{"q": "thumbs up"}' \
+| jq '.[0]'
+
+# Expected output:
+# {
+#   "id": "3oEjHGr1Fhz0kyv8Ig",
+#   "preview": "https://media0.giphy.com/media/3oEjHGr1Fhz0kyv8Ig/giphy-preview.gif",
+#   "url":     "https://media0.giphy.com/media/3oEjHGr1Fhz0kyv8Ig/giphy.gif"
+# }
+
+# 2. Register the GIF with the CDN (branch ID 12)
+curl -s -X POST https://clody.lol/api/cdn/benches/gif \
+  -H "Content-Type: application/json" \
+  -b "session=<your-session-cookie>" \
+  -d '{
+    "id_bench": 12,
+    "url": "https://media0.giphy.com/media/3oEjHGr1Fhz0kyv8Ig/giphy.gif"
+  }'
+
+# Expected output:
+# { "filename": "b7e1a2f3c4d5e6f708192a3b4c5d6e7f.gif" }
+
+# 3. Create the message with the GIF attached
+curl -s -X POST https://clody.lol/api/bm/create \
+  -H "Content-Type: application/json" \
+  -b "session=<your-session-cookie>" \
+  -d '{
+    "branch": 12,
+    "text": "Check this out!",
+    "cdn": ["b7e1a2f3c4d5e6f708192a3b4c5d6e7f.gif"]
+  }'
+```

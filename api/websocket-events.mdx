@@ -1,0 +1,219 @@
+---
+title: "WebSocket Events Reference for Clody Real-Time API"
+sidebarTitle: "WebSocket Events"
+description: "Complete reference for all Clody Socket.IO events across the main and /bcalls namespaces, including connection, messages, reactions, calls, and presence."
+---
+
+Every real-time update in Clody is delivered over [Socket.IO](https://socket.io). There is no polling — as soon as something changes (a new message, a reaction, a voice call, a friend request), the server pushes the event to every affected user instantly. This page is the complete reference for all events across the main namespace (`/`) and the voice namespace (`/bcalls`).
+
+---
+
+## Connecting
+
+Connect to the root namespace (`/`) using your session cookie. Socket.IO handles the upgrade from HTTP to WebSocket automatically.
+
+```javascript
+import { io } from 'socket.io-client';
+
+const socket = io('/', { withCredentials: true });
+
+socket.on('success', () => console.log('Connected to Clody'));
+socket.on('new_bmessage', (msg) => console.log('New message:', msg));
+socket.on('new_reaction', (r) => console.log('Reaction:', r));
+```
+
+Once the connection is authenticated, the server emits one of three handshake events:
+
+| Event | Meaning |
+|-------|---------|
+| `success` | Connection confirmed. You are fully authenticated. |
+| `verification_required` | Your account email has not been verified yet. Verify your email before you can receive events. |
+| `banned` | Your account has been suspended due to too many warnings. The payload is an array of your active warnings. |
+
+<Note>
+  Clody sends events only to relevant users. You receive events exclusively for Branches and Picnics you are a member of — you will never see messages or reactions from channels you have not joined.
+</Note>
+
+---
+
+## Main Namespace (`/`) — Server → Client Events
+
+### Connection & Account
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `success` | `{}` | Socket connection confirmed and session validated. |
+| `verification_required` | `{}` | Your account email is not yet verified. |
+| `banned` | Array of warning objects | Your account has been suspended. |
+| `logout` | `{}` | You called "logout all devices" — all your sessions have been invalidated. |
+
+---
+
+### Branch Messages
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `new_bmessage` | Message object | A new message was posted in a Branch you belong to. |
+| `update_bmessage` | Message object | A Branch message was edited or marked as read. |
+| `delete_bmessage` | `{ id: integer, branch_id: integer }` | A Branch message was deleted. |
+
+---
+
+### Picnic Posts & Comments
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `new_pmessage` | Message object | A new post was created in a Picnic you belong to. |
+| `update_pmessage` | Message object | A Picnic post was edited. |
+| `delete_pmessage` | `{ id: integer, picnic_id: integer }` | A Picnic post was deleted. |
+| `new_comment` | Comment object | A comment was added to a Picnic post. |
+| `update_comment` | Comment object | A comment was edited. |
+| `delete_comment` | `{ id: integer, message: integer }` | A comment was deleted. `message` is the parent post ID. |
+
+---
+
+### Reactions
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `new_reaction` | Reaction object | An emoji reaction was added to a message or post. |
+| `delete_reaction` | Reaction object | An emoji reaction was removed. |
+
+See the [Reactions API](/api/reactions) page for the full reaction object schema.
+
+---
+
+### Branches & Picnics
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `added_branch` | Branch object | You were added to a Branch. |
+| `update_branch` | `{ branch_id: integer }` | A Branch you belong to was renamed or updated. |
+| `kicked_from_branch` | `{ id: integer, name: string }` | You were removed from a Branch. |
+| `left_branch` | `{ id: integer, member: string }` | Another member left a Branch you are in. `member` is their display name. |
+| `added_picnic` | Picnic object | You joined or created a Picnic. |
+| `update_picnic` | Picnic summary object | A Picnic's settings (name, avatar, etc.) changed. |
+| `banned_from_picnic` | `{ id: integer, name: string }` | You were banned from a Picnic. |
+| `deleted_picnic` | `{ id: integer }` | A Picnic was permanently deleted. |
+
+---
+
+### Friends
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `friend_request` | `{ who: integer, display_name: string }` | Another user sent you a friend request. `who` is their user ID. |
+| `accept_request` | `{ id: integer }` | Your outgoing friend request was accepted. `id` is the user ID of the person who accepted. |
+| `reject_request` | `{ id: integer }` | Your outgoing friend request was declined. `id` is the user ID of the person who rejected it. |
+
+---
+
+### Voice Calls
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `new_call` | Call state object | An incoming call started in a Branch you belong to — you are in the `waiting` list. |
+| `started_call` | Call state object | The call you just started is active (confirmation to the caller). |
+| `stop_call` | `{ id: integer }` | The call in Branch `id` has ended. |
+
+---
+
+## Main Namespace (`/`) — Client → Server Events
+
+| Event | Payload | What it does |
+|-------|---------|--------------|
+| `start_call` | `{ id: integer, server_addr?: string }` | Starts a voice call in Branch `id`. All other Branch members receive `new_call`; you receive `started_call`. `server_addr` must be a hostname from `GET /api/calls/servers`. |
+
+---
+
+## `/bcalls` Namespace
+
+The `/bcalls` namespace handles all in-call signalling: joining, leaving, mic toggling, and screen sharing. Connect to it separately using the same session cookie before emitting any of these events.
+
+```javascript
+import { io } from 'socket.io-client';
+
+const calls = io('/bcalls', { withCredentials: true });
+
+calls.on('update', (callState) => {
+  console.log('Call updated:', callState);
+});
+
+calls.on('error', ({ cause }) => {
+  console.error('Call error:', cause);
+});
+```
+
+### `/bcalls` — Client → Server Events
+
+| Event | Payload | What it does |
+|-------|---------|--------------|
+| `join_call` | `{ id: integer }` | Moves you from `waiting` into `members`. Emits `update` to all call members. |
+| `leave_call` | `{ id: integer }` | Removes you from the call. If you were the last member, the call ends and waiting users receive `stop_call` on the main namespace. |
+| `reject_call` | `{ id: integer }` | Removes you from `waiting` without joining. Emits `update` to current members. |
+| `mic_toggle` | `{ id: integer, off: boolean }` | Mutes (`off: true`) or unmutes (`off: false`) your microphone. Emits `update` to all members. |
+| `toggle_screen_sharing` | `{ id: integer, off: boolean }` | Starts (`off: false`) or stops (`off: true`) your screen share. Emits `update` to all members. |
+| `toggle_watching_screen_sharing` | `{ id: integer, off: boolean, author: integer }` | Registers (`off: false`) or unregisters (`off: true`) you as a watcher of `author`'s screen share. Emits `update` to all members. |
+
+### `/bcalls` — Server → Client Events
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `update` | Call state object | Any change to call state — members joining or leaving, mic toggles, screen sharing changes. |
+| `error` | `{ cause: string }` | An action you attempted failed (e.g. not a member, call already active, unrecognised server). |
+
+---
+
+## Quick Start Example
+
+```javascript
+import { io } from 'socket.io-client';
+
+// Connect to the main namespace with your session cookie
+const socket = io('/', { withCredentials: true });
+
+// Handle the initial handshake
+socket.on('success', () => {
+  console.log('Connected and authenticated');
+});
+
+socket.on('verification_required', () => {
+  console.warn('Please verify your email address');
+});
+
+socket.on('banned', (warnings) => {
+  console.error('Account suspended:', warnings);
+});
+
+// Branch messages
+socket.on('new_bmessage', (msg) => {
+  console.log(`New message in branch ${msg.branch}:`, msg.text);
+});
+
+socket.on('delete_bmessage', ({ id, branch_id }) => {
+  console.log(`Message ${id} deleted from branch ${branch_id}`);
+});
+
+// Reactions
+socket.on('new_reaction', (reaction) => {
+  console.log(`${reaction.emoji} added to message ${reaction.message}`);
+});
+
+socket.on('delete_reaction', (reaction) => {
+  console.log(`${reaction.emoji} removed from message ${reaction.message}`);
+});
+
+// Incoming voice call
+socket.on('new_call', (call) => {
+  console.log(`Incoming call in branch ${call.id} — server: ${call.server_addr}`);
+});
+
+socket.on('stop_call', ({ id }) => {
+  console.log(`Call in branch ${id} ended`);
+});
+
+// Friend activity
+socket.on('friend_request', ({ who, display_name }) => {
+  console.log(`Friend request from ${display_name} (user ${who})`);
+});
+```

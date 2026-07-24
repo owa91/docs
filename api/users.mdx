@@ -1,0 +1,120 @@
+---
+title: "Users API: Look Up Clody User Profiles by Username or ID"
+sidebarTitle: "Users"
+description: "Look up any Clody user by username or numeric ID. Returns their full profile including display name, avatar, online status, and relationship info."
+---
+
+The Users API lets you fetch the public profile of any Clody account — including your own. You identify the user by either their username or their numeric ID, and Clody returns everything you need to render their profile card: display name, avatar, accent color, status text, bio, and your relationship with them. You must be logged in with a verified email address to use this endpoint.
+
+---
+
+## POST /api/users/get
+
+Looks up a single user profile by username or numeric ID.
+
+<Note>
+  Pass either `username` **or** `id` — you do not need both. If you include both, `id` takes precedence.
+</Note>
+
+<Tip>
+  The special ID `0` always returns the built-in system user **Clody** regardless of any other parameters. This account is always shown as online. Note that the system user response omits the `thought`, `color`, and `description` fields — only `username`, `id`, `display_name`, `is_friend`, `is_enemy`, `online`, and `avatar` are returned.
+</Tip>
+
+### Request body
+
+<ParamField body="username" type="string">
+  The exact username of the user to look up. Case-sensitive.
+</ParamField>
+
+<ParamField body="id" type="integer">
+  The numeric ID of the user to look up. Use `0` to retrieve the system user Clody.
+</ParamField>
+
+```bash
+# Look up by username
+curl -b cookies.txt -X POST https://clody.lol/api/users/get \
+  -H "Content-Type: application/json" \
+  -d '{"username": "ada"}'
+
+# Look up by ID
+curl -b cookies.txt -X POST https://clody.lol/api/users/get \
+  -H "Content-Type: application/json" \
+  -d '{"id": 42}'
+
+# Fetch the system user
+curl -b cookies.txt -X POST https://clody.lol/api/users/get \
+  -H "Content-Type: application/json" \
+  -d '{"id": 0}'
+```
+
+### Response
+
+`200 OK`:
+
+<ResponseField name="username" type="string">
+  The user's unique username.
+</ResponseField>
+
+<ResponseField name="id" type="integer">
+  The user's numeric account ID. `0` for the system user Clody.
+</ResponseField>
+
+<ResponseField name="display_name" type="string">
+  The user's chosen display name. May differ from `username`.
+</ResponseField>
+
+<ResponseField name="is_friend" type="boolean">
+  `true` if this user is in your friends list.
+</ResponseField>
+
+<ResponseField name="is_enemy" type="boolean">
+  `true` if you have blocked this user.
+</ResponseField>
+
+<ResponseField name="online" type="boolean">
+  `true` if the user currently has an active Socket.IO connection. Always `true` for the system user.
+</ResponseField>
+
+<ResponseField name="avatar" type="string | null">
+  URL of the user's avatar image, or `null` if none is set.
+</ResponseField>
+
+<ResponseField name="thought" type="string">
+  The user's current short status or quote (up to 100 characters). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="color" type="string">
+  The user's accent color as a hex string (e.g. `"#a78bfa"` or `"#f0f"`). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  The user's bio or profile description (up to 300 characters). Empty string if not set.
+</ResponseField>
+
+```json
+{
+  "username": "ada",
+  "id": 42,
+  "display_name": "Ada",
+  "is_friend": true,
+  "is_enemy": false,
+  "online": true,
+  "avatar": "https://clody.lol/avatars/ada.webp",
+  "thought": "building cool things ✨",
+  "color": "#a78bfa",
+  "description": "Software engineer. Coffee enthusiast."
+}
+```
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Bad Requests"` | Neither `username` nor `id` was provided. |
+| `400` | `"Not Authorized"` | No valid or verified session cookie. |
+| `403` | `"Forbidden"` | The user has disabled friend requests (`accepts_friend_requests: false`) and you are neither friends with them nor viewing your own profile. Their profile is not visible to you. |
+| `404` | `"Not Found"` | No user with the given `username` or `id` exists. |
+
+<Warning>
+  If a user sets `accepts_friend_requests` to `false` in their privacy settings, their profile becomes private. You will receive a `403` when attempting to look them up unless you are already friends or you are looking up your own account.
+</Warning>

@@ -1,0 +1,216 @@
+---
+title: "Send, Edit, and Reply to Messages in Clody Branches"
+sidebarTitle: "Messaging"
+description: "Learn how to send, edit, delete, and reply to messages in Clody Branches, with support for file attachments and real-time delivery via Socket.IO."
+---
+
+Messaging in Clody happens inside Branches — private spaces shared between friends. Every message you send is delivered instantly to all Branch members through Socket.IO, so conversations feel live. This guide walks you through the full message lifecycle: finding or creating a Branch, sending your first message, paginating history, and keeping messages tidy with edits and deletes.
+
+## Prerequisites
+
+- You must be a member of the Branch you want to message.
+- Your session cookie must be valid (you are logged in).
+- If you want to attach files, upload them first — see [Media Uploads](/guides/media-uploads).
+
+## Step 1 — Find or Create a Branch
+
+Get a summary of all your Branches (with unread counts) using `GET /api/branches/overview`:
+
+```bash
+curl https://clody.lol/api/branches/overview \
+  -b "session=<your_session_cookie>"
+```
+
+The response is an array of Branch objects, each including `id`, `name`, `ispm`, `members`, `unread`, and `last_at`. Use the `id` field in subsequent calls.
+
+If you need a new Branch, create one first — see the [Branches concept page](/concepts/branches) for details.
+
+## Step 2 — Send a Message
+
+`POST /api/bm/create`
+
+<ParamField body="branch" type="number" required>
+  The ID of the Branch you are sending to. You must be a member.
+</ParamField>
+
+<ParamField body="content" type="string" required>
+  The message text. Maximum **5 000 characters**.
+</ParamField>
+
+<ParamField body="cdn" type="array">
+  An optional array of filenames previously uploaded to the Branch CDN. Maximum **10 items**. See [Media Uploads](/guides/media-uploads).
+</ParamField>
+
+<ParamField body="answer_to" type="number">
+  The ID of a message in the same Branch that this message is replying to.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/bm/create \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{
+    "branch": 12,
+    "content": "Hey! Are we still on for Saturday?",
+    "cdn": [],
+    "answer_to": null
+  }'
+```
+
+**Response — message object:**
+
+```json
+{
+  "id": 1045,
+  "branch": 12,
+  "author": 7,
+  "content": "Hey! Are we still on for Saturday?",
+  "cdn": [],
+  "edited": false,
+  "created_at": 1718200000,
+  "read": [],
+  "data": { "answer_to": null }
+}
+```
+
+All Branch members receive a `new_bmessage` Socket.IO event with the same payload.
+
+## Step 3 — Attach Files
+
+Upload your file to the Branch CDN first, then include the returned `filename` in the `cdn` array:
+
+```bash
+# 1. Upload
+curl -X POST https://clody.lol/api/cdn/benches/upload \
+  -b "session=<your_session_cookie>" \
+  -F "file=@photo.jpg" \
+  -F "id_bench=12"
+
+# Response: {"filename": "a3f8...b2.jpg", "original_name": "photo.jpg"}
+
+# 2. Send with attachment
+curl -X POST https://clody.lol/api/bm/create \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{
+    "branch": 12,
+    "content": "Check out this photo",
+    "cdn": ["a3f8b2.jpg"]
+  }'
+```
+
+Retrieve an attached file with `GET /cdn/benches/<branch_id>/<filename>` (requires an active session).
+
+## Step 4 — Listen for Real-Time Replies
+
+After sending a message, subscribe to `new_bmessage` on your Socket.IO connection so you see replies without polling:
+
+```javascript
+socket.on("new_bmessage", (message) => {
+  if (message.branch === currentBranchId) {
+    appendMessageToUI(message);
+  }
+});
+```
+
+See [Real-Time Events](/concepts/realtime) for connection setup.
+
+## List Messages (Pagination)
+
+`POST /api/bm/list`
+
+<ParamField body="branch" type="number" required>
+  Branch ID to fetch messages from.
+</ParamField>
+
+<ParamField body="before_id" type="number">
+  Return only messages with an ID lower than this value. Use the smallest `id` from your previous page to load older messages.
+</ParamField>
+
+<ParamField body="limit" type="number">
+  How many messages to return. Defaults to 30, maximum **100**.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/bm/list \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"branch": 12, "limit": 30}'
+```
+
+**Response:**
+
+```json
+{
+  "messages": [ /* array of message objects, oldest first */ ],
+  "has_more": true
+}
+```
+
+When `has_more` is `true`, pass `"before_id": <lowest_id_in_current_page>` to fetch the next older batch.
+
+## Edit a Message
+
+`POST /api/bm/edit` — you can only edit your own messages.
+
+<ParamField body="id" type="number" required>
+  The message ID to edit.
+</ParamField>
+
+<ParamField body="new_content" type="string" required>
+  The replacement text. Maximum 5 000 characters.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/bm/edit \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 1045, "new_content": "Hey! Are we still on for Sunday?"}'
+```
+
+The updated message (with `"edited": true`) is returned and broadcast to all Branch members as an `update_bmessage` event.
+
+## Delete a Message
+
+`POST /api/bm/delete` — you can only delete your own messages.
+
+```bash
+curl -X POST https://clody.lol/api/bm/delete \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 1045}'
+```
+
+All Branch members receive a `delete_bmessage` event: `{"id": 1045, "branch_id": 12}`.
+
+## Mark a Message as Read
+
+`POST /api/bm/mark_read` — records your read receipt on the message.
+
+```bash
+curl -X POST https://clody.lol/api/bm/mark_read \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 1045}'
+```
+
+An `update_bmessage` event is broadcast to all members with the updated `read` array so every client can update its unread indicator.
+
+## Fetch a Single Message
+
+`POST /api/bm/get`
+
+```bash
+curl -X POST https://clody.lol/api/bm/get \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 1045}'
+```
+
+## Error Reference
+
+| HTTP Status | Meaning |
+|---|---|
+| `400` | Missing required field, content too long, or too many CDN attachments |
+| `403` | You are not a member of the Branch |
+| `404` | Message or Branch not found |

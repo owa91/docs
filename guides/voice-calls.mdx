@@ -1,0 +1,280 @@
+---
+title: "Start, Join, and Manage Voice Calls in Clody Branches"
+sidebarTitle: "Voice Calls"
+description: "Clody supports real-time voice calls within Branches. Learn how to start, join, manage mic, share your screen, and end calls using Socket.IO."
+---
+
+Clody lets you jump straight from a Branch text chat into a voice call with the same members. Calls are powered by Socket.IO over the dedicated `/bcalls` namespace and coordinated through a lightweight REST layer that provisions tokens and lists available servers. This guide covers everything from starting your first call to sharing your screen and hanging up.
+
+## Prerequisites
+
+- You must be a member of the Branch you want to call.
+- Connect to the `/bcalls` Socket.IO namespace (in addition to the main `/` namespace).
+- Your session cookie must be valid.
+
+<Note>
+  Only one active call can exist per Branch at a time. If a call is already in progress, you will receive an error if you try to start a second one.
+</Note>
+
+## Step 1 — Get Available Voice Servers
+
+`GET /api/calls/servers`
+
+Retrieve the list of available regional voice servers before starting a call. You can optionally pass the preferred server when you emit `start_call`.
+
+```bash
+curl https://clody.lol/api/calls/servers \
+  -b "session=<your_session_cookie>"
+```
+
+**Response:**
+
+```json
+{
+  "Moscow, RU": "moscow.clody.lol",
+  "Tel Aviv, IS": "israil.clody.lol"
+}
+```
+
+## Step 2 — Get a Call Token
+
+`POST /api/calls/token`
+
+Obtain a signed token that your WebRTC layer uses to authenticate with the voice server.
+
+```bash
+curl -X POST https://clody.lol/api/calls/token \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 12}'
+```
+
+**Response:**
+
+```json
+{ "token": "<signed_jwt>" }
+```
+
+## Step 3 — Connect to the `/bcalls` Namespace
+
+```javascript
+import { io } from "socket.io-client";
+
+const callSocket = io("https://clody.lol/bcalls", {
+  withCredentials: true,
+});
+
+callSocket.on("update", (call) => {
+  console.log("Call state updated:", call);
+  renderCallUI(call);
+});
+
+callSocket.on("error", ({ cause }) => {
+  console.error("Call error:", cause);
+});
+```
+
+## Step 4 — Start a Call
+
+Emit `start_call` on the **main `/` namespace** (`socket`) with the Branch ID. Optionally pass a `server_addr` from the servers list to route the call to a specific region.
+
+<Note>
+  `start_call` is emitted on the main `/` namespace, not on `/bcalls`. All other call-control events (`join_call`, `leave_call`, `mic_toggle`, etc.) are emitted on `callSocket` (`/bcalls`).
+</Note>
+
+```javascript
+socket.emit("start_call", {
+  id: 12,                          // Branch ID
+  server_addr: "moscow.clody.lol", // optional
+});
+
+// The server acknowledges with `started_call` on the main `/` namespace
+socket.on("started_call", (call) => {
+  console.log("Call started:", call);
+});
+```
+
+All other Branch members receive a `new_call` event on the main `/` namespace with the same Call object.
+
+## Step 5 — Join an Incoming Call
+
+When another member starts a call, you receive `new_call` on the main namespace. Join by emitting `join_call` on the `/bcalls` namespace:
+
+```javascript
+socket.on("new_call", (call) => {
+  showIncomingCallBanner(call);
+});
+
+function acceptCall(branchId) {
+  callSocket.emit("join_call", { id: branchId });
+}
+```
+
+You move from the `waiting` list to the `members` list in the Call object, and all participants receive an `update` event.
+
+## Step 6 — Reject an Incoming Call
+
+If you do not want to join, emit `reject_call` to dismiss the notification:
+
+```javascript
+callSocket.emit("reject_call", { id: 12 });
+```
+
+## Step 7 — Manage Your Microphone
+
+Toggle mute state with `mic_toggle`. When `off` is `true` you are muted; `false` un-mutes you:
+
+```javascript
+// Mute
+callSocket.emit("mic_toggle", { id: 12, off: true });
+
+// Unmute
+callSocket.emit("mic_toggle", { id: 12, off: false });
+```
+
+Your user ID appears in the call's `mic_off` array when you are muted. All participants receive an `update` event.
+
+## Step 8 — Share Your Screen
+
+Start screen sharing with `toggle_screen_sharing`:
+
+```javascript
+// Start sharing
+callSocket.emit("toggle_screen_sharing", { id: 12, off: false });
+
+// Stop sharing
+callSocket.emit("toggle_screen_sharing", { id: 12, off: true });
+```
+
+Your user ID becomes a key in the call's `sharing_screen` object. The value is an array of participant IDs who are currently watching your stream.
+
+## Step 9 — Watch Someone's Screen Share
+
+Express intent to watch a specific participant's screen with `toggle_watching_screen_sharing`:
+
+```javascript
+// Start watching user 42's screen
+callSocket.emit("toggle_watching_screen_sharing", {
+  id: 12,
+  off: false,
+  author: 42, // user ID of the person sharing their screen
+});
+
+// Stop watching
+callSocket.emit("toggle_watching_screen_sharing", {
+  id: 12,
+  off: true,
+  author: 42,
+});
+```
+
+<Note>
+  The `author` must currently be sharing their screen. If they are not, you will receive an `error` event.
+</Note>
+
+## Step 10 — Leave the Call
+
+```javascript
+callSocket.emit("leave_call", { id: 12 });
+```
+
+If you are the last participant, the server tears down the call and emits `stop_call` (`{id: 12}`) to any users still in the `waiting` list.
+
+## Call State Object
+
+Every `update`, `started_call`, and `new_call` event carries a Call object:
+
+<ResponseField name="id" type="number">
+  The Branch ID the call belongs to.
+</ResponseField>
+
+<ResponseField name="members" type="array of numbers">
+  User IDs of participants currently in the call.
+</ResponseField>
+
+<ResponseField name="waiting" type="array of numbers">
+  User IDs of Branch members who have been invited but have not yet joined.
+</ResponseField>
+
+<ResponseField name="mic_off" type="array of numbers">
+  User IDs of participants who are currently muted.
+</ResponseField>
+
+<ResponseField name="sharing_screen" type="object">
+  Map of `user_id → [watcher_ids]`. Each key is a participant sharing their screen; the value is the list of participants watching them.
+</ResponseField>
+
+<ResponseField name="server_addr" type="string or null">
+  The voice server hostname this call is routed through, if one was specified at start time.
+</ResponseField>
+
+## Get the Current Call State via REST
+
+If you need to poll the call state (for example, on page load), use `POST /api/calls/get`:
+
+```bash
+curl -X POST https://clody.lol/api/calls/get \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"id": 12}'
+```
+
+Returns the Call object, or `null` if no call is active in that Branch.
+
+## Full Flow Example
+
+```javascript
+import { io } from "socket.io-client";
+
+const socket     = io("https://clody.lol",        { withCredentials: true });
+const callSocket = io("https://clody.lol/bcalls", { withCredentials: true });
+
+// Handle incoming calls
+socket.on("new_call", (call) => {
+  const accept = confirm(`Incoming call in Branch ${call.id}. Accept?`);
+  if (accept) {
+    callSocket.emit("join_call", { id: call.id });
+  } else {
+    callSocket.emit("reject_call", { id: call.id });
+  }
+});
+
+// Render call UI on every state update
+callSocket.on("update", (call) => {
+  document.getElementById("members").textContent =
+    `In call: ${call.members.join(", ")}`;
+  document.getElementById("muted").textContent =
+    `Muted: ${call.mic_off.join(", ")}`;
+});
+
+callSocket.on("error", ({ cause }) => alert(`Call error: ${cause}`));
+
+// Start a call (emitted on the main `/` namespace)
+document.getElementById("call-btn").onclick = () => {
+  socket.emit("start_call", { id: currentBranchId });
+};
+
+// Mute toggle
+document.getElementById("mute-btn").onclick = () => {
+  callSocket.emit("mic_toggle", { id: currentBranchId, off: !isMuted });
+  isMuted = !isMuted;
+};
+
+// End call
+document.getElementById("end-btn").onclick = () => {
+  callSocket.emit("leave_call", { id: currentBranchId });
+};
+```
+
+## Error Reference
+
+| Error cause | Meaning |
+|---|---|
+| `Not Authorized` | Session cookie is missing or invalid |
+| `Bad Request` | A required field is missing |
+| `This branch doesn't exist` | Branch ID not found |
+| `You aren't member` | You are not a member of the Branch |
+| `This branch has a call` | A call is already active — join instead of starting |
+| `This call doesn't exist` | The call ended before your action arrived |
+| `You aren't waiting` | You tried to reject a call you were not invited to |
+| `You are in voice` | You tried to connect to `/bcalls` while already in a call |

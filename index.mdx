@@ -1,0 +1,35 @@
+---
+title: "Clody API Documentation: Real-Time Messaging Platform"
+sidebarTitle: "Home"
+description: "Welcome to the Clody API docs. Explore how to integrate Branches for private chats, Picnics for communities, real-time events, voice calls, and more."
+---
+
+Clody is a real-time messaging platform that exposes a full HTTP and Socket.IO API. Whether you're building a custom client, scripting automations, or exploring how Clody works under the hood, these docs walk you through everything — from creating your first account to sending messages, joining public Picnics, and making voice calls.
+
+<CardGroup cols={2}>
+  <Card title="Introduction" icon="message" href="/introduction">
+    Understand the core concepts: Branches, Picnics, real-time events, and how authentication works.
+  </Card>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Register, log in, and send your first message in under five minutes.
+  </Card>
+  <Card title="API Reference" icon="code" href="/api/auth">
+    Full reference for every endpoint — request shapes, response fields, and error codes.
+  </Card>
+  <Card title="Core Concepts" icon="book" href="/concepts/branches">
+    Deep-dive into Branches and Picnics: how they differ, how to manage members, and more.
+  </Card>
+</CardGroup>
+
+## Feature highlights
+
+Clody ships with a complete set of social-messaging features you can access through the API:
+
+- **Branches** — Private one-on-one or group chats between friends. Only invited members can read or send messages.
+- **Picnics** — Public community channels anyone can discover, join, and post in.
+- **Voice calls** — Real-time audio calls inside any Branch, powered by a dedicated voice server.
+- **Emoji reactions** — React to any message with an emoji; reactions are delivered instantly over Socket.IO.
+- **GIF search** — Search and embed GIFs directly in messages without leaving Clody.
+- **File uploads** — Attach images and files to Branch messages via multipart upload to the CDN.
+- **Friends system** — Send and accept friend requests, block users, and manage your social graph.
+- **Email verification** — Every account is tied to a verified email address, keeping the platform secure.

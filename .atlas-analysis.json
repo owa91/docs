@@ -1,0 +1,175 @@
+{
+  "projectType": "saas",
+  "projectName": "Clody",
+  "projectDescription": "Clody is a real-time messaging platform featuring private/group chats (Branches), community channels (Picnics), voice calls, reactions, GIF support, and a CDN for file attachments.",
+  "theme": "luma",
+  "primaryColor": "#6C8EF5",
+  "lightColor": "#EEF2FF",
+  "darkColor": "#1A1F3C",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "authentication"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "concepts/branches",
+              "concepts/picnics",
+              "concepts/realtime"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/messaging",
+              "guides/voice-calls",
+              "guides/media-uploads",
+              "guides/friends"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Auth & Users",
+            "pages": [
+              "api/auth",
+              "api/users",
+              "api/settings"
+            ]
+          },
+          {
+            "group": "Branches",
+            "pages": [
+              "api/branches",
+              "api/branch-messages"
+            ]
+          },
+          {
+            "group": "Picnics",
+            "pages": [
+              "api/picnics",
+              "api/picnic-messages",
+              "api/comments"
+            ]
+          },
+          {
+            "group": "Interactions",
+            "pages": [
+              "api/reactions",
+              "api/gifs",
+              "api/cdn"
+            ]
+          },
+          {
+            "group": "Real-Time",
+            "pages": [
+              "api/voice-calls",
+              "api/websocket-events"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Branches — private and group chats with real-time messaging, replies, and file attachments",
+    "Picnics — public/community channels with posts, comments, pinned messages, and anonymous authorship",
+    "Voice calls — in-branch audio calls with mic toggle and screen sharing support",
+    "Real-time updates via Socket.IO for messages, reactions, presence, and calls",
+    "Friends system — send/accept/decline friend requests, block users",
+    "Reactions — emoji reactions on both Branch and Picnic messages",
+    "GIF search and attachment powered by Giphy",
+    "CDN file uploads for avatars, branch attachments, and picnic media",
+    "Email-verified login with 2FA-style one-time codes",
+    "Per-route rate limiting to protect API endpoints"
+  ],
+  "publicApiSurface": [
+    "POST /api/register",
+    "POST /api/verification/login",
+    "POST /api/login",
+    "GET  /api/session",
+    "POST /api/logout",
+    "POST /api/settings/logout_all_devices",
+    "GET  /api/settings/get",
+    "POST /api/settings/set",
+    "GET  /api/friends/get",
+    "POST /api/friends/send_request",
+    "POST /api/friends/request",
+    "POST /api/friends/unfriend",
+    "POST /api/friends/set_enemy",
+    "POST /api/users/get",
+    "GET  /api/branches/get",
+    "GET  /api/branches/overview",
+    "POST /api/branch/get",
+    "POST /api/branch/create",
+    "POST /api/branch/rename",
+    "POST /api/branch/add_member",
+    "POST /api/branch/kick",
+    "POST /api/branch/leave",
+    "POST /api/bm/list",
+    "POST /api/bm/get",
+    "POST /api/bm/create",
+    "POST /api/bm/edit",
+    "POST /api/bm/delete",
+    "POST /api/bm/mark_read",
+    "GET  /api/picnics/get",
+    "GET  /api/picnics/overview",
+    "POST /api/picnic/get",
+    "POST /api/picnic/search",
+    "POST /api/picnic/create",
+    "POST /api/picnic/edit",
+    "POST /api/picnic/join",
+    "POST /api/picnic/leave",
+    "POST /api/picnic/delete",
+    "POST /api/picnic/ban",
+    "POST /api/picnic/unban",
+    "POST /api/picnic/manage",
+    "POST /api/pm/list",
+    "POST /api/pm/get",
+    "POST /api/pm/create",
+    "POST /api/pm/edit",
+    "POST /api/pm/delete",
+    "POST /api/pm/mark_read",
+    "POST /api/pm/pin_message",
+    "POST /api/comment/list",
+    "POST /api/comment/get",
+    "POST /api/comment/create",
+    "POST /api/comment/edit",
+    "POST /api/comment/delete",
+    "POST /api/comment/like",
+    "POST /api/reactions/get",
+    "POST /api/reaction/create",
+    "POST /api/reaction/delete",
+    "POST /api/gifs/search",
+    "POST /api/cdn/benches/upload",
+    "POST /api/cdn/benches/gif",
+    "POST /api/cdn/picnics/upload",
+    "POST /api/cdn/avatars/upload",
+    "POST /api/cdn/picnics/avatars/upload",
+    "GET  /cdn/benches/<bench>/<filename>",
+    "GET  /cdn/picnics/<picnic>/<filename>",
+    "GET  /cdn/avatar/<filename>",
+    "POST /api/calls/get",
+    "GET  /api/calls/servers",
+    "POST /api/calls/token",
+    "Socket.IO event: start_call",
+    "Socket.IO event: join_call",
+    "Socket.IO event: leave_call",
+    "Socket.IO event: reject_call",
+    "Socket.IO event: mic_toggle",
+    "Socket.IO event: toggle_screen_sharing",
+    "Socket.IO namespace: /bcalls"
+  ]
+}

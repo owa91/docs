@@ -1,0 +1,186 @@
+---
+title: "Real-Time Events and Socket.IO Connection in Clody"
+sidebarTitle: "Real-Time"
+description: "Connect to Clody's Socket.IO namespaces for live updates. Learn the session handshake and every event for messages, reactions, calls, and friends."
+---
+
+Clody delivers live updates — new messages, reactions, friend requests, voice calls, and more — through [Socket.IO](https://socket.io). Instead of polling the REST API, your client connects once and receives events the moment they happen. Authentication reuses your existing session cookie, so no extra token exchange is required.
+
+## Connecting
+
+Clody exposes two Socket.IO namespaces:
+
+| Namespace | Purpose |
+|---|---|
+| `/` | All general events: messages, reactions, friends, Picnics, Branches, presence |
+| `/bcalls` | Voice-call signalling for Branch calls |
+
+Connect to the main namespace right after the user logs in. The server reads your session cookie automatically:
+
+```javascript
+import { io } from "socket.io-client";
+
+const socket = io("https://clody.lol", {
+  withCredentials: true, // sends the session cookie
+});
+
+socket.on("connect", () => {
+  console.log("Socket connected:", socket.id);
+});
+```
+
+### Connection Handshake
+
+After the TCP connection is established, the server emits one of three events before any other activity:
+
+| Event | Meaning |
+|---|---|
+| `success` | Your session is valid. You are now in your personal room and will receive all events addressed to your user ID. |
+| `verification_required` | Your account email has not been verified. Verify your email and reconnect. |
+| `banned` | Your account is suspended. The payload is an array of warning objects. |
+
+<Note>
+  You will not receive any message or friend events until the server emits `success`. Always listen for this event before treating the connection as ready.
+</Note>
+
+## Main Namespace (`/`) Event Reference
+
+All events below are **server → client** unless noted otherwise.
+
+### Branch Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `added_branch` | Branch object | You were added to a Branch (on creation or when a member invites you). |
+| `update_branch` | `{branch_id: number}` | A Branch was renamed. Fetch the Branch again to get the new name. |
+| `new_bmessage` | Message object | A new message was sent in one of your Branches. |
+| `update_bmessage` | Message object | A Branch message was edited, or a read receipt was added. |
+| `delete_bmessage` | `{id: number, branch_id: number}` | A Branch message was deleted. |
+| `left_branch` | `{id: number, member: string}` | A member left a group Branch. `member` is their display name. |
+| `kicked_from_branch` | `{id: number, name: string}` | You were kicked from a Branch. |
+
+### Picnic Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `added_picnic` | Picnic object | You joined or created a Picnic. |
+| `update_picnic` | Picnic object | Picnic settings were changed, a post was pinned, or the avatar updated. |
+| `new_pmessage` | Message object | A new post was published in a Picnic. |
+| `update_pmessage` | Message object | A Picnic post was edited. |
+| `delete_pmessage` | `{id: number, picnic_id: number}` | A Picnic post was deleted. |
+| `new_comment` | Comment object | A new comment was added to a Picnic post. |
+| `update_comment` | Comment object | A comment was edited. |
+| `delete_comment` | `{id: number, message: number}` | A comment was deleted. `message` is the parent post ID. |
+| `banned_from_picnic` | `{id: number, name: string}` | You were banned from a Picnic. |
+| `deleted_picnic` | `{id: number}` | A Picnic was deleted by its owner. |
+
+### Reaction Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `new_reaction` | Reaction object | An emoji reaction was added to a message or post. |
+| `delete_reaction` | Reaction object | An emoji reaction was removed. |
+
+### Friend Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `friend_request` | `{who: number, display_name: string}` | Another user sent you a friend request. |
+| `accept_request` | `{id: number}` | Your friend request was accepted. `id` is your own user ID. |
+| `reject_request` | `{id: number}` | Your friend request was declined. `id` is your own user ID. |
+
+### Voice Call Events
+
+These arrive on the main `/` namespace (not `/bcalls`) and notify you of call activity in your Branches.
+
+| Event | Direction | Payload | Description |
+|---|---|---|---|
+| `new_call` | Server → Client | Call object | An active call is waiting for you to join in one of your Branches. |
+| `started_call` | Server → Client | Call object | Your `start_call` emit was accepted and the call is live. |
+| `stop_call` | Server → Client | `{id: number}` | The active call in a Branch has ended. |
+| `start_call` | Client → Server | `{id: number, server_addr?: string}` | Start a voice call in a Branch. |
+
+### Session Events
+
+| Event | Payload | Description |
+|---|---|---|
+| `success` | `{}` | Connection authenticated successfully. |
+| `verification_required` | `{}` | Email verification is required. |
+| `banned` | Warns array | Account is suspended. |
+| `logout` | `{}` | All sessions for your account were invalidated. Redirect to login. |
+
+## `/bcalls` Namespace Event Reference
+
+Connect to the `/bcalls` namespace to participate in voice calls. See the [Voice Calls guide](/guides/voice-calls) for the full workflow.
+
+```javascript
+const callSocket = io("https://clody.lol/bcalls", {
+  withCredentials: true,
+});
+```
+
+| Event | Direction | Payload | Description |
+|---|---|---|---|
+| `update` | Server → Client | Call object | The call state changed (member joined, left, muted, screen-share toggled). |
+| `error` | Server → Client | `{cause: string}` | An error occurred in response to your emit (e.g., call not found, not a member). |
+| `join_call` | Client → Server | `{id: number}` | Join an existing call. |
+| `leave_call` | Client → Server | `{id: number}` | Leave the active call. |
+| `reject_call` | Client → Server | `{id: number}` | Decline an incoming call invitation. |
+| `mic_toggle` | Client → Server | `{id: number, off: boolean}` | Mute or unmute your microphone. |
+| `toggle_screen_sharing` | Client → Server | `{id: number, off: boolean}` | Start or stop broadcasting your screen. |
+| `toggle_watching_screen_sharing` | Client → Server | `{id: number, off: boolean, author: number}` | Start or stop watching another participant's screen share. |
+
+## Full Connection Example
+
+The snippet below shows a minimal client that connects to both namespaces, handles the handshake, and listens for Branch messages and incoming calls.
+
+```javascript
+import { io } from "socket.io-client";
+
+// ── Main namespace ──────────────────────────────────────────────────────────
+const socket = io("https://clody.lol", { withCredentials: true });
+
+socket.on("success", () => {
+  console.log("✅ Real-time connection ready");
+});
+
+socket.on("verification_required", () => {
+  console.warn("Please verify your email address.");
+});
+
+socket.on("banned", (warns) => {
+  console.error("Account suspended. Warnings:", warns);
+});
+
+socket.on("new_bmessage", (message) => {
+  console.log("New message in Branch", message.branch, ":", message.content);
+});
+
+socket.on("new_call", (call) => {
+  console.log("Incoming call in Branch", call.id);
+  // Show call notification UI
+});
+
+socket.on("friend_request", ({ who, display_name }) => {
+  console.log(`${display_name} (${who}) wants to be your friend`);
+});
+
+socket.on("logout", () => {
+  window.location.href = "/login";
+});
+
+// ── Voice namespace ─────────────────────────────────────────────────────────
+const callSocket = io("https://clody.lol/bcalls", { withCredentials: true });
+
+callSocket.on("update", (call) => {
+  console.log("Call state updated:", call);
+});
+
+callSocket.on("error", ({ cause }) => {
+  console.error("Call error:", cause);
+});
+```
+
+<Tip>
+  If you are building a web app, include `withCredentials: true` on every `io()` call so the browser forwards the session cookie on the WebSocket upgrade request.
+</Tip>

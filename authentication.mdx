@@ -1,0 +1,343 @@
+---
+title: "Clody Authentication: Sessions, Login, and Verification"
+sidebarTitle: "Authentication"
+description: "Clody uses HTTP session cookies for authentication. Learn how to register, log in with email verification codes, manage sessions, and log out."
+---
+
+Clody uses server-side session cookies to authenticate every request. When you log in successfully, the server sets an `HttpOnly`, `Secure`, `SameSite=Lax` cookie in your browser that is valid for 30 days. You don't manage tokens manually — the cookie is sent automatically with every request. On top of standard authentication, Clody requires all accounts to have a verified email address before accessing most API routes.
+
+---
+
+## Registration
+
+Create a new account by sending your desired username, a password, and a Google reCAPTCHA v2 token. The reCAPTCHA token must be obtained from a reCAPTCHA v2 widget rendered in a real browser — it cannot be generated programmatically.
+
+**`POST /api/register`**
+
+<ParamField body="username" type="string" required>
+  Your chosen username. Must be unique across all Clody accounts.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Your account password.
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  A Google reCAPTCHA v2 response token obtained from a browser widget. Clody verifies this against Google's API to confirm you're not a bot.
+</ParamField>
+
+```bash
+curl -s -X POST https://your-clody-server/api/register \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "username": "yourname",
+    "password": "s3cur3P@ssword",
+    "token": "03AGdBq2...reCAPTCHA-token..."
+  }'
+```
+
+**Responses:**
+
+<ResponseField name="body" type="string">
+  `"Success"` on a successful registration. The session cookie is set immediately.
+</ResponseField>
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| 200 | `"Success"` | Account created and session cookie set. |
+| 400 | `"Bad Request"` | A required field is missing or empty. |
+| 403 | `"Username is taken"` | The username is already in use — choose another. |
+| 403 | `"You are bot"` | reCAPTCHA verification failed — get a fresh token. |
+
+<Note>
+  After registration your account is in an **unverified** state. You must link and verify an email address before most other API routes will accept your requests. See [Email Verification](#email-verification) below.
+</Note>
+
+---
+
+## Login
+
+Clody uses a two-step login flow to protect your account. Step 1 validates your credentials and dispatches a one-time code to your registered email. Step 2 exchanges that code for a live session.
+
+### Step 1 — Request a login code
+
+**`POST /api/verification/login`**
+
+<ParamField body="username" type="string" required>
+  Your Clody username.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Your account password.
+</ParamField>
+
+```bash
+curl -s -X POST https://your-clody-server/api/verification/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "username": "yourname",
+    "password": "s3cur3P@ssword"
+  }'
+```
+
+**Success response (`200`) — email code sent:**
+
+```json
+{
+  "email_hint": "y***e@example.com",
+  "expires_in": 600
+}
+```
+
+<ResponseField name="email_hint" type="string">
+  A partially masked version of your registered email address, so you know where to look.
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Seconds until the code expires (always 600 — 10 minutes).
+</ResponseField>
+
+**Success response (`200`) — no email linked yet:**
+
+```json
+{
+  "logged_in": true,
+  "needs_email": true
+}
+```
+
+If your account has no email address linked, Clody signs you in directly and sets the session cookie. You must then add and verify an email via the [Email Verification](#email-verification) flow before accessing protected routes.
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| 200 | see above | Credentials valid. Code sent or immediate login granted. |
+| 400 | `"Bad Request"` | Username or password field is missing. |
+| 403 | `"Incorrect username or password"` | Credentials do not match any account. |
+| 429 | `"You can generate a new code in N sec."` | 60-second resend cooldown is still active. |
+
+### Step 2 — Confirm the code
+
+After receiving the 4-digit code in your email, submit it with your username to complete login. The session cookie is set on success.
+
+**`POST /api/login`**
+
+<ParamField body="username" type="string" required>
+  Your Clody username — must match what you used in Step 1.
+</ParamField>
+
+<ParamField body="code" type="string" required>
+  The 4-digit code from the login email you received.
+</ParamField>
+
+```bash
+curl -s -X POST https://your-clody-server/api/login \
+  -H "Content-Type: application/json" \
+  -b cookies.txt -c cookies.txt \
+  -d '{
+    "username": "yourname",
+    "code": "4827"
+  }'
+```
+
+**Success response (`200`):**
+
+```json
+"Success"
+```
+
+The `Set-Cookie` header in the response contains your session cookie (`HttpOnly`, `Secure`, `SameSite=Lax`, 30-day lifetime). Browsers apply it automatically.
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| 200 | `"Success"` | Login complete. Session cookie set. |
+| 400 | `"Bad Request"` | Username or code field is missing. |
+| 403 | — | Code is wrong, expired, or not yet requested. |
+
+<Warning>
+  You have a maximum of **5 attempts** to enter the correct code. After 5 failures the code is invalidated and you must request a new one from Step 1. A 60-second cooldown applies between code requests.
+</Warning>
+
+---
+
+## Email verification
+
+Every Clody account must have a verified email address. New accounts and accounts created before email verification was introduced start in an unverified state. Complete the following two-step process to link your email.
+
+### Step 1 — Submit your email address
+
+**`POST /api/verification/set_email`**
+
+<ParamField body="email" type="string" required>
+  The email address you want to link to your account. Must be a valid email format and not already linked to another Clody account. Maximum 254 characters.
+</ParamField>
+
+```bash
+curl -s -X POST https://your-clody-server/api/verification/set_email \
+  -H "Content-Type: application/json" \
+  -b cookies.txt -c cookies.txt \
+  -d '{"email": "you@example.com"}'
+```
+
+**Success response (`200`):**
+
+```json
+{
+  "email": "you@example.com",
+  "expires_in": 600
+}
+```
+
+<ResponseField name="email" type="string">
+  The email address Clody will send the verification code to.
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Seconds until the code expires (600 — 10 minutes).
+</ResponseField>
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| 200 | `{email, expires_in}` | Code sent. |
+| 400 | `"Bad Request"` | Email is missing or invalid. |
+| 403 | `"Email is linked"` | Your account already has a verified email. |
+| 403 | `"This email is taken"` | Another account uses that email. |
+| 429 | `"You can generate a new code in N sec."` | 60-second resend cooldown still active. |
+
+### Step 2 — Confirm the verification code
+
+**`POST /api/verification`**
+
+<ParamField body="code" type="string" required>
+  The 4-digit code that was emailed to the address you submitted in Step 1.
+</ParamField>
+
+```bash
+curl -s -X POST https://your-clody-server/api/verification \
+  -H "Content-Type: application/json" \
+  -b cookies.txt -c cookies.txt \
+  -d '{"code": "3951"}'
+```
+
+**Success response (`200`):**
+
+```json
+"Success"
+```
+
+On success, your email is stored and your account becomes fully verified. All existing sessions are invalidated — you must log in again on any other devices.
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| 200 | `"Success"` | Email verified. Account fully active. |
+| 400 | `"Bad Request"` | Code field is missing. |
+| 403 | `"Time is up"` | Code expired after 10 minutes — start again. |
+| 403 | — | Code is incorrect. Up to 5 attempts allowed before the code is invalidated. |
+
+<Note>
+  **Code limits:** Each verification code expires after **10 minutes**, allows a maximum of **5 entry attempts**, and has a **60-second cooldown** before you can request a new one.
+</Note>
+
+---
+
+## Session management
+
+### Check session status
+
+Use this endpoint any time you need to know whether the current cookie is still valid — for example, on page load before deciding where to redirect the user.
+
+**`GET /api/session`**
+
+```bash
+curl -s https://your-clody-server/api/session \
+  -b cookies.txt
+```
+
+**Response (always `200`):**
+
+```json
+{
+  "authenticated": true,
+  "verified": true,
+  "username": "yourname"
+}
+```
+
+<ResponseField name="authenticated" type="boolean">
+  `true` if the session cookie maps to a valid, active account.
+</ResponseField>
+
+<ResponseField name="verified" type="boolean">
+  `true` if the account has a linked, verified email address. Most API routes require this to be `true`.
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Your account username. Only present when `authenticated` is `true`.
+</ResponseField>
+
+<Note>
+  This endpoint **always returns HTTP 200**. An `authenticated: false` response is a normal state, not an error. Your client should check the `authenticated` field in the body rather than the HTTP status code.
+</Note>
+
+**Cookie properties:**
+
+| Property | Value |
+|----------|-------|
+| `HttpOnly` | Yes — not readable by JavaScript |
+| `Secure` | Yes — HTTPS only |
+| `SameSite` | `Lax` |
+| Lifetime | 30 days |
+
+Most protected routes require **both** `authenticated: true` and `verified: true`. Accounts with an unverified email will receive `400 "Not Authorized"` from those routes even if they hold a valid cookie.
+
+---
+
+## Logout
+
+### Log out of the current session
+
+Clear only the session on the current device.
+
+**`POST /api/logout`**
+
+```bash
+curl -s -X POST https://your-clody-server/api/logout \
+  -b cookies.txt -c cookies.txt
+```
+
+**Response (`200`):**
+```json
+"Success"
+```
+
+### Log out of all devices
+
+Invalidate every active session across all devices at once. Any device still using an old session cookie will receive `authenticated: false` from `/api/session`.
+
+**`POST /api/settings/logout_all_devices`**
+
+```bash
+curl -s -X POST https://your-clody-server/api/settings/logout_all_devices \
+  -b cookies.txt -c cookies.txt
+```
+
+**Response (`200`):**
+```json
+"Success"
+```
+
+All connected Socket.IO clients also receive a `logout` event immediately, so active browser sessions are kicked in real time.
+
+---
+
+## Error reference
+
+The following status codes appear across all authentication and session-related endpoints.
+
+| Status | Typical body | Meaning |
+|--------|--------------|---------|
+| 400 | `"Not Authorized"` | Your session cookie is missing, invalid, or the account is unverified. |
+| 400 | `"Bad Request"` | A required field in the request body is missing or malformed. |
+| 403 | `"Forbidden"` | You do not have permission for this action (e.g. wrong credentials, banned, already linked email). |
+| 429 | `"Too many requests"` | You've hit the rate limit for this route. Check the `Retry-After` response header for how long to wait. |

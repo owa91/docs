@@ -1,0 +1,147 @@
+---
+title: "Settings API: Manage Your Clody Profile and Preferences"
+sidebarTitle: "Settings"
+description: "Read and update your Clody profile settings including display name, avatar, bio, accent color, status text, and privacy preferences."
+---
+
+The Settings API gives you full control over your Clody profile and privacy preferences. Use `GET /api/settings/get` to read your current configuration, and `POST /api/settings/set` to update any combination of fields in a single request. You must be logged in with a verified email address to use either endpoint.
+
+---
+
+## GET /api/settings/get
+
+Returns your complete profile and settings object.
+
+```bash
+curl -b cookies.txt https://clody.lol/api/settings/get
+```
+
+### Response
+
+`200 OK`:
+
+<ResponseField name="username" type="string">
+  Your unique login username. This value is read-only and cannot be changed via the Settings API.
+</ResponseField>
+
+<ResponseField name="display_name" type="string">
+  Your public display name. Defaults to your username on registration.
+</ResponseField>
+
+<ResponseField name="avatar" type="string | null">
+  URL of your current avatar image, or `null` if you haven't set one.
+</ResponseField>
+
+<ResponseField name="description" type="string">
+  Your profile bio (up to 300 characters). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="thought" type="string">
+  Your current short status or quote (up to 100 characters). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="color" type="string">
+  Your accent color as a hex string (e.g. `"#a78bfa"`). Empty string if not set.
+</ResponseField>
+
+<ResponseField name="settings" type="object">
+  Your privacy and preference toggles.
+
+  <Expandable title="settings fields">
+    <ResponseField name="settings.accepts_friend_requests" type="boolean">
+      When `false`, other users cannot view your profile or send you friend requests. Defaults to `true`.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+```json
+{
+  "username": "ada",
+  "display_name": "Ada",
+  "avatar": "https://clody.lol/avatars/ada.webp",
+  "description": "Software engineer. Coffee enthusiast.",
+  "thought": "building cool things ✨",
+  "color": "#a78bfa",
+  "settings": {
+    "accepts_friend_requests": true
+  }
+}
+```
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Not Authorized"` | No valid or verified session cookie. |
+
+---
+
+## POST /api/settings/set
+
+Updates any combination of your profile fields. All fields are **optional** — only the keys you include are modified. Fields you omit remain unchanged.
+
+<Tip>
+  You can update multiple fields in a single request. There is no need to send unchanged fields; the server performs a partial update.
+</Tip>
+
+### Request body
+
+<ParamField body="display_name" type="string">
+  Your new public display name. Must be a non-empty string — if you send an empty string or omit this field, the display name is left unchanged.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Your profile bio. Maximum **300 characters**. Send an empty string to clear it.
+</ParamField>
+
+<ParamField body="thought" type="string">
+  A short status message or quote shown on your profile. Maximum **100 characters**. Send an empty string to clear it.
+</ParamField>
+
+<ParamField body="color" type="string">
+  Your profile accent color. Must be a valid CSS hex color in `#RGB` (3-digit) or `#RRGGBB` (6-digit) format, e.g. `"#a78bfa"` or `"#f0f"`. Send an empty string to clear it.
+</ParamField>
+
+<ParamField body="settings" type="object">
+  A settings object whose keys replace your stored settings. Currently supports:
+
+  - **`accepts_friend_requests`** (`boolean`) — Set to `false` to make your profile private and block incoming friend requests. Set back to `true` to restore visibility.
+</ParamField>
+
+```bash
+curl -b cookies.txt -X POST https://clody.lol/api/settings/set \
+  -H "Content-Type: application/json" \
+  -d '{
+    "display_name": "Ada",
+    "description": "Software engineer. Coffee enthusiast.",
+    "thought": "building cool things ✨",
+    "color": "#a78bfa",
+    "settings": {
+      "accepts_friend_requests": true
+    }
+  }'
+```
+
+You can also update a single field without touching the rest:
+
+```bash
+curl -b cookies.txt -X POST https://clody.lol/api/settings/set \
+  -H "Content-Type: application/json" \
+  -d '{"thought": "shipping fast 🚀"}'
+```
+
+### Response
+
+`200 OK` — `"Success"`.
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Not Authorized"` | No valid or verified session cookie. |
+| `400` | `"Too Long"` | `description` exceeds 300 characters or `thought` exceeds 100 characters. |
+| `400` | `"Bad Color"` | `color` is not a valid `#RGB` or `#RRGGBB` hex string. |
+
+<Warning>
+  Setting `accepts_friend_requests` to `false` immediately hides your profile from all users who are not already your friends. They will receive a `403` when calling `POST /api/users/get` with your username or ID.
+</Warning>

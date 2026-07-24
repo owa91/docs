@@ -1,0 +1,247 @@
+---
+title: "How to Upload Branch Files, GIFs, and Avatars in Clody"
+sidebarTitle: "Media Uploads"
+description: "Learn how to upload files, avatars, and GIFs in Clody. Covers Branch attachments, Picnic files, user avatars, and size limits for each upload type."
+---
+
+Clody's built-in CDN lets you attach images, videos, documents, and GIFs to Branch messages and Picnic posts, and update your profile or community avatar — all from a simple multipart upload. This guide explains every upload endpoint, how to serve files back to clients, and the limits that apply.
+
+## Size and Attachment Limits
+
+| Upload type | Max file size | Notes |
+|---|---|---|
+| Branch file | 30 MB | Up to 10 attachments per message |
+| Picnic post file | 30 MB | Admin access required |
+| User avatar | 30 MB | Replaces your current avatar automatically |
+| Picnic avatar | **5 MB** | Owner access required |
+| GIF attachment | ~15 MB | Fetched from Giphy and stored on the CDN |
+
+## Branch File Uploads
+
+### Upload a File
+
+`POST /api/cdn/benches/upload` — multipart form data
+
+| Form field | Type | Description |
+|---|---|---|
+| `file` | File | The file to upload |
+| `id_bench` | String (numeric) | The Branch ID this file belongs to |
+
+You must be a member of the specified Branch.
+
+```bash
+curl -X POST https://clody.lol/api/cdn/benches/upload \
+  -b "session=<your_session_cookie>" \
+  -F "file=@document.pdf" \
+  -F "id_bench=12"
+```
+
+**Response:**
+
+```json
+{
+  "filename": "a3f8c91e4d2b...76.pdf",
+  "original_name": "document.pdf"
+}
+```
+
+Use the `filename` value in the `cdn` array when you call `POST /api/bm/create`:
+
+```bash
+curl -X POST https://clody.lol/api/bm/create \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{
+    "branch": 12,
+    "content": "Here is the document you asked for",
+    "cdn": ["a3f8c91e4d2b...76.pdf"]
+  }'
+```
+
+### Retrieve a Branch File
+
+`GET /cdn/benches/<branch_id>/<filename>`
+
+```bash
+curl "https://clody.lol/cdn/benches/12/a3f8c91e4d2b...76.pdf" \
+  -b "session=<your_session_cookie>" \
+  --output document.pdf
+```
+
+<Note>
+  Only members of the Branch can access its CDN files. The server returns `403` if you are not a member.
+</Note>
+
+## Attach a GIF to a Branch Message
+
+Instead of uploading a GIF file manually, use the dedicated GIF proxy endpoint. It fetches the GIF from Giphy's CDN and stores it on Clody's servers.
+
+### Search for a GIF
+
+`POST /api/gifs/search`
+
+<ParamField body="q" type="string">
+  Search query. Omit or leave empty to get trending GIFs.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/gifs/search \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{"q": "happy dance"}'
+```
+
+**Response — up to 24 results:**
+
+```json
+[
+  {
+    "id": "giphy_id_here",
+    "preview": "https://media.giphy.com/media/.../giphy-downsized-small.gif",
+    "url": "https://media.giphy.com/media/.../giphy-downsized.gif"
+  }
+]
+```
+
+### Save the GIF to a Branch
+
+`POST /api/cdn/benches/gif`
+
+<ParamField body="id_bench" type="number" required>
+  The Branch ID where you will attach the GIF.
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  The full Giphy URL returned by `/api/gifs/search`. Only `giphy.com` URLs are accepted.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/cdn/benches/gif \
+  -H "Content-Type: application/json" \
+  -b "session=<your_session_cookie>" \
+  -d '{
+    "id_bench": 12,
+    "url": "https://media.giphy.com/media/.../giphy-downsized.gif"
+  }'
+```
+
+**Response:**
+
+```json
+{ "filename": "7d4e3b2a...c1.gif" }
+```
+
+Include the filename in the `cdn` array of your `POST /api/bm/create` call just like any other file.
+
+## Picnic File Uploads
+
+Admins can upload files to attach to Picnic posts.
+
+### Upload a File
+
+`POST /api/cdn/picnics/upload` — multipart form data, **admin required**
+
+| Form field | Type | Description |
+|---|---|---|
+| `file` | File | The file to upload |
+| `id_picnic` | String (numeric) | The Picnic ID this file belongs to |
+
+```bash
+curl -X POST https://clody.lol/api/cdn/picnics/upload \
+  -b "session=<your_session_cookie>" \
+  -F "file=@announcement.png" \
+  -F "id_picnic=7"
+```
+
+**Response:**
+
+```json
+{
+  "filename": "9c1a...f3.png",
+  "original_name": "announcement.png"
+}
+```
+
+Include the filename in the `cdn` array of `POST /api/pm/create`.
+
+### Retrieve a Picnic File
+
+`GET /cdn/picnics/<picnic_id>/<filename>`
+
+```bash
+curl "https://clody.lol/cdn/picnics/7/9c1a...f3.png" \
+  -b "session=<your_session_cookie>"
+```
+
+Picnic files are accessible to any logged-in user (the Picnic does not need to be joined).
+
+## Avatar Uploads
+
+### Update Your User Avatar
+
+`POST /api/cdn/avatars/upload` — multipart form data
+
+Uploading a new avatar immediately replaces your current one. No separate update call is needed.
+
+```bash
+curl -X POST https://clody.lol/api/cdn/avatars/upload \
+  -b "session=<your_session_cookie>" \
+  -F "file=@profile.jpg"
+```
+
+**Response:**
+
+```json
+{
+  "filename": "b2d7...4e.jpg",
+  "original_name": "profile.jpg"
+}
+```
+
+### Update a Picnic's Avatar
+
+`POST /api/cdn/picnics/avatars/upload` — multipart form data, **owner required**, max **5 MB**
+
+| Form field | Type | Description |
+|---|---|---|
+| `file` | File | The new avatar image (max 5 MB) |
+| `id_picnic` | String (numeric) | The Picnic ID to update |
+
+```bash
+curl -X POST https://clody.lol/api/cdn/picnics/avatars/upload \
+  -b "session=<your_session_cookie>" \
+  -F "file=@community-logo.png" \
+  -F "id_picnic=7"
+```
+
+**Response:**
+
+```json
+{
+  "filename": "e3f0...9a.png",
+  "original_name": "community-logo.png"
+}
+```
+
+After a successful upload, all Picnic members receive an `update_picnic` Socket.IO event with the refreshed Picnic object.
+
+### Retrieve an Avatar
+
+`GET /cdn/avatar/<filename>`
+
+```bash
+curl "https://clody.lol/cdn/avatar/b2d7...4e.jpg" \
+  -b "session=<your_session_cookie>"
+```
+
+This endpoint serves both user avatars and Picnic avatars (both are stored in the same `cdn/avatars` directory).
+
+## Error Reference
+
+| HTTP Status | Meaning |
+|---|---|
+| `400` | File missing, filename empty, invalid Branch/Picnic ID, or file exceeds size limit |
+| `403` | Not a Branch member, not a Picnic admin, or not the Picnic owner (for avatar) |
+| `404` | Branch or Picnic not found |
+| `400` (GIF) | URL is not from `giphy.com`, or GIF exceeds 15 MB |
+| `502` | Could not fetch the GIF from Giphy |

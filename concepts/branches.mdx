@@ -1,0 +1,117 @@
+---
+title: "Branches: Private Messaging and Group Chats in Clody"
+sidebarTitle: "Branches"
+description: "Branches are Clody's private messaging spaces. Direct messages and group chats, limited to friends, with real-time updates and file attachments."
+---
+
+A Branch is a private messaging space in Clody. Whether you want a one-on-one conversation or a group chat with several friends, a Branch keeps those messages visible only to its members. Because Clody requires participants to be friends before they can share a Branch, you always know exactly who is in the conversation.
+
+## What Is a Branch?
+
+Every Branch belongs to one of two modes, determined at creation time by the `ispm` flag:
+
+- **Direct message (DM)** — `ispm: true`. Exactly two participants: you and one friend. No additional members can be added later.
+- **Group chat** — `ispm: false`. You plus any number of friends. New friends can be invited after the Branch is created.
+
+When you create a Branch, Clody automatically adds you as the owner. Every other person you list in `members` must already be on your friends list. If any member ID you supply is not a friend, the server returns `403 Forbidden`.
+
+## Branch Lifecycle
+
+<Steps>
+  <Step title="Create the Branch">
+    Send a `POST /api/branch/create` request with the IDs of the friends you want to include. For a group chat, you can optionally supply a `name`.
+
+    ```bash
+    curl -X POST https://clody.lol/api/branch/create \
+      -H "Content-Type: application/json" \
+      -b "session=<your_session_cookie>" \
+      -d '{
+        "members": [42, 57],
+        "name": "Weekend Plans",
+        "ispm": false
+      }'
+    ```
+
+    The server responds with the new Branch object and emits an `added_branch` Socket.IO event to every member.
+  </Step>
+
+  <Step title="Add More Members (group chats only)">
+    Any current member can invite additional friends using `POST /api/branch/add_member`. The new member must be a friend of the person doing the inviting.
+
+    ```bash
+    curl -X POST https://clody.lol/api/branch/add_member \
+      -H "Content-Type: application/json" \
+      -b "session=<your_session_cookie>" \
+      -d '{"id": 12, "member": 99}'
+    ```
+
+    <Note>You cannot add members to a DM Branch (`ispm: true`).</Note>
+  </Step>
+
+  <Step title="Chat">
+    Send messages with `POST /api/bm/create`. Messages can contain up to **5 000 characters** and up to **10 file attachments**. See the [Messaging guide](/guides/messaging) for the full message workflow.
+  </Step>
+
+  <Step title="Rename the Branch">
+    Any member can rename the group with `POST /api/branch/rename`. Pass `name: null` to clear the name.
+
+    ```bash
+    curl -X POST https://clody.lol/api/branch/rename \
+      -H "Content-Type: application/json" \
+      -b "session=<your_session_cookie>" \
+      -d '{"id": 12, "name": "Road Trip Crew"}'
+    ```
+  </Step>
+
+  <Step title="Leave or Kick">
+    - **Non-owners** leave with `POST /api/branch/leave`. The remaining members receive a `left_branch` event.
+    - **The owner** can remove any non-owner with `POST /api/branch/kick`. The removed member receives a `kicked_from_branch` event.
+
+    <Warning>The Branch owner cannot leave. If you own a Branch, you must either keep it or kick all other members before it becomes idle.</Warning>
+  </Step>
+</Steps>
+
+## Message Features
+
+| Feature | Details |
+|---|---|
+| Text content | Up to 5 000 characters per message |
+| File attachments | Up to 10 CDN-uploaded files per message (see [Media Uploads](/guides/media-uploads)) |
+| Reply-to | Pass `answer_to: <message_id>` to thread a reply |
+| Edit | `POST /api/bm/edit` — only the message author can edit |
+| Delete | `POST /api/bm/delete` — only the message author can delete |
+| Mark as read | `POST /api/bm/mark_read` — records your read receipt |
+| Reactions | Emoji reactions visible to all members |
+
+## Permissions
+
+| Action | Owner | Member |
+|---|---|---|
+| Send messages | ✅ | ✅ |
+| Edit own messages | ✅ | ✅ |
+| Delete own messages | ✅ | ✅ |
+| Mark messages as read | ✅ | ✅ |
+| Add members (group only) | ✅ | ✅ |
+| Rename Branch | ✅ | ✅ |
+| Kick a member | ✅ | ❌ |
+| Leave Branch | ❌ | ✅ |
+
+## Real-Time Events
+
+Clody pushes Branch activity to all members over Socket.IO. You receive these events on the default `/` namespace. See [Real-Time Events](/concepts/realtime) for connection details.
+
+| Event | Payload | When it fires |
+|---|---|---|
+| `added_branch` | Branch object | You were added to a new Branch |
+| `update_branch` | `{branch_id}` | Branch was renamed |
+| `new_bmessage` | Message object | A new message was sent |
+| `update_bmessage` | Message object | A message was edited or a read receipt was added |
+| `delete_bmessage` | `{id, branch_id}` | A message was deleted |
+| `new_reaction` | Reaction object | An emoji reaction was added |
+| `delete_reaction` | Reaction object | An emoji reaction was removed |
+| `left_branch` | `{id, member}` | A member left the group |
+| `kicked_from_branch` | `{id, name}` | You were removed from the Branch |
+| `new_call` | Call object | An incoming voice call started in this Branch |
+| `stop_call` | `{id}` | The active voice call ended |
+
+<Tip>Subscribe to `added_branch` on first connect so your UI can display new Branches without a full page refresh.</Tip>

@@ -1,0 +1,279 @@
+---
+title: "Clody CDN API: Upload and Retrieve Files in Branches"
+sidebarTitle: "CDN"
+description: "Upload files, avatars, and GIFs to Clody CDN for use in Branch messages and Picnic posts. Returns filenames to include in message cdn arrays."
+---
+
+Clody uses an upload-then-reference pattern for all file attachments. You upload a file first and receive a `filename` back from the CDN. You then include that filename in the `cdn` array of a message creation request. Retrieval endpoints serve files back with membership checks so that only people who belong to the right Branch or Picnic can access the content.
+
+<Note>
+  You can attach up to **10 files** per Branch message. Each upload endpoint enforces its own size limit — see the [Limits](#limits) table below.
+</Note>
+
+---
+
+## Upload Endpoints
+
+### Upload a Branch file — `POST /api/cdn/benches/upload`
+
+Uploads any file (image, video, document, etc.) to a Branch. You must be a member of the Branch to upload.
+
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="binary" required>
+  The file to upload. Maximum **30 MB**.
+</ParamField>
+
+<ParamField body="id_bench" type="string" required>
+  Numeric ID of the Branch you are uploading to, passed as a form field string.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "filename": "3a1f8c2d4e5b607f9a0e1d2c3b4a5f67.png",
+  "original_name": "screenshot.png"
+}
+```
+
+<ResponseField name="filename" type="string">
+  Randomly generated filename (hex token + original extension). Use this value in your `cdn` array.
+</ResponseField>
+
+<ResponseField name="original_name" type="string">
+  The original filename as provided by the client.
+</ResponseField>
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400`  | Missing file, missing `id_bench`, or file exceeds 30 MB. |
+| `403`  | You are not a member of this Branch. |
+
+---
+
+### Attach a GIF to a Branch — `POST /api/cdn/benches/gif`
+
+Fetches a GIF from Giphy by URL and stores it in the Branch's CDN directory. Use this after a successful `POST /api/gifs/search` to register the chosen GIF.
+
+**Content-Type:** `application/json`
+
+<ParamField body="id_bench" type="integer" required>
+  ID of the Branch.
+</ParamField>
+
+<ParamField body="url" type="string" required>
+  A Giphy URL (hostname must be `giphy.com` or `*.giphy.com`). The server fetches the GIF server-side; you do not upload the binary yourself.
+</ParamField>
+
+**Response `200`**
+
+```json
+{ "filename": "a3f8c2d1e4b5607f9a0e1d2c3b4a5f67.gif" }
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400`  | Missing fields, non-Giphy URL, or fetched GIF exceeds 15 MB. |
+| `403`  | You are not a member of this Branch. |
+| `502`  | Clody could not fetch the GIF from Giphy. |
+
+<Warning>
+  Only URLs from `giphy.com` or its subdomains (e.g. `media2.giphy.com`) are accepted. Passing any other URL returns `400 Bad Request`.
+</Warning>
+
+---
+
+### Upload a Picnic file — `POST /api/cdn/picnics/upload`
+
+Uploads a file to a Picnic's CDN storage. Only Picnic **admins** can use this endpoint.
+
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="binary" required>
+  The file to upload. Maximum **30 MB**.
+</ParamField>
+
+<ParamField body="id_picnic" type="string" required>
+  Numeric ID of the Picnic, passed as a form field string.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "filename": "9c4e7f1a2b3d5e6f08192a3b4c5d6e7f.jpg",
+  "original_name": "banner.jpg"
+}
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400`  | Missing file, missing `id_picnic`, or file exceeds 30 MB. |
+| `403`  | You are not an admin of this Picnic. |
+| `404`  | The Picnic does not exist. |
+
+---
+
+### Upload your user avatar — `POST /api/cdn/avatars/upload`
+
+Replaces your user avatar. The server updates your profile immediately after a successful upload — no separate profile-update call is needed.
+
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="binary" required>
+  The image file. Maximum **30 MB**.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "filename": "d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6.jpg",
+  "original_name": "me.jpg"
+}
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400`  | Missing file or file exceeds 30 MB. |
+
+---
+
+### Upload a Picnic avatar — `POST /api/cdn/picnics/avatars/upload`
+
+Replaces the avatar for a Picnic community. Only the Picnic **owner** (not just an admin) can call this endpoint. On success the server immediately pushes an `update_picnic` Socket.IO event to all Picnic members.
+
+**Content-Type:** `multipart/form-data`
+
+<ParamField body="file" type="binary" required>
+  The image file. Maximum **5 MB**.
+</ParamField>
+
+<ParamField body="id_picnic" type="string" required>
+  Numeric ID of the Picnic, passed as a form field string.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "filename": "f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1.png",
+  "original_name": "community-logo.png"
+}
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `400`  | Missing file, missing `id_picnic`, or file exceeds 5 MB. |
+| `403`  | You are not the owner of this Picnic. |
+| `404`  | The Picnic does not exist. |
+
+---
+
+## Retrieval Endpoints
+
+### Get a Branch file — `GET /cdn/benches/<bench_id>/<filename>`
+
+Serves a file stored in a Branch. You must be a member of the Branch.
+
+**Path parameters**
+
+<ParamField path="bench_id" type="integer" required>
+  Numeric ID of the Branch.
+</ParamField>
+
+<ParamField path="filename" type="string" required>
+  The `filename` value returned by the upload endpoint.
+</ParamField>
+
+**Response `200`** — raw file binary with the appropriate `Content-Type`.
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `403`  | You are not a member of this Branch. |
+| `404`  | File not found. |
+
+---
+
+### Get a Picnic file — `GET /cdn/picnics/<picnic_id>/<filename>`
+
+Serves a file stored in a Picnic. You must be authenticated to make this request.
+
+**Path parameters**
+
+<ParamField path="picnic_id" type="integer" required>
+  Numeric ID of the Picnic.
+</ParamField>
+
+<ParamField path="filename" type="string" required>
+  The `filename` value returned by the upload endpoint.
+</ParamField>
+
+**Response `200`** — raw file binary.
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `404`  | Picnic or file not found. |
+
+---
+
+### Get an avatar — `GET /cdn/avatar/<filename>`
+
+Serves a user or Picnic avatar image. Any authenticated user can access any avatar by filename — there is no additional membership check.
+
+**Path parameters**
+
+<ParamField path="filename" type="string" required>
+  The `filename` value returned by one of the avatar upload endpoints.
+</ParamField>
+
+**Response `200`** — image binary.
+
+---
+
+## Limits
+
+| Endpoint | Max size | Who can upload |
+|---|---|---|
+| `POST /api/cdn/benches/upload` | 30 MB | Branch members |
+| `POST /api/cdn/benches/gif` | 15 MB | Branch members |
+| `POST /api/cdn/picnics/upload` | 30 MB | Picnic admins |
+| `POST /api/cdn/avatars/upload` | 30 MB | Any authenticated user |
+| `POST /api/cdn/picnics/avatars/upload` | 5 MB | Picnic owner |
+
+---
+
+## Example: Upload a File to a Branch
+
+```bash
+curl -X POST https://clody.lol/api/cdn/benches/upload \
+  -b "session=<your-session-cookie>" \
+  -F "file=@/path/to/document.pdf" \
+  -F "id_bench=12"
+```
+
+Response:
+
+```json
+{
+  "filename": "3a1f8c2d4e5b607f9a0e1d2c3b4a5f67.pdf",
+  "original_name": "document.pdf"
+}
+```
+
+You can now include `"3a1f8c2d4e5b607f9a0e1d2c3b4a5f67.pdf"` in the `cdn` array of `POST /api/bm/create`.

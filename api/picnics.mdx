@@ -1,0 +1,593 @@
+---
+title: "Picnics API: Create and Manage Clody Community Channels"
+sidebarTitle: "Picnics"
+description: "API reference for Clody Picnics — community channels with owner, admin, and member roles. Create, search, join, edit, moderate, and delete picnics."
+---
+
+Picnics are Clody's public community channels. Anyone can discover and join a picnic; once inside, admins post the content and members engage through comments. Every picnic has exactly one owner (its creator), one or more admins (including the owner), and any number of members. This page covers all endpoints for creating and managing picnics, as well as the real-time Socket.IO events your client receives as picnic state changes.
+
+---
+
+## The Picnic object
+
+The `picnic_summary` shape is returned by most endpoints on this page.
+
+<ResponseField name="id" type="integer">
+  Unique numeric identifier for the picnic.
+</ResponseField>
+
+<ResponseField name="name" type="string">
+  Display name of the picnic (up to 30 characters).
+</ResponseField>
+
+<ResponseField name="avatar" type="string | null">
+  URL of the picnic's avatar image, or `null` if none has been set.
+</ResponseField>
+
+<ResponseField name="members_count" type="integer">
+  Total number of current members.
+</ResponseField>
+
+<ResponseField name="link" type="string | null">
+  Custom URL slug used in the short-link `/@/<link>`, or `null` if no custom link has been set.
+</ResponseField>
+
+<ResponseField name="data" type="object">
+  Metadata object with the following nested fields:
+
+  <Expandable title="data fields">
+    <ResponseField name="data.description" type="string | null">
+      Short description of the picnic (up to 50 characters), or `null`.
+    </ResponseField>
+
+    <ResponseField name="data.pinned" type="integer | null">
+      ID of the currently pinned `PMessage`, or `null` if nothing is pinned.
+    </ResponseField>
+
+    <ResponseField name="data.original" type="boolean">
+      `true` when the picnic has been marked as an official Clody original channel.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="supports_comments" type="boolean">
+  Whether comment threads are enabled for posts in this picnic.
+</ResponseField>
+
+<ResponseField name="is_member" type="boolean">
+  `true` if the authenticated user is currently a member.
+</ResponseField>
+
+<ResponseField name="is_admin" type="boolean">
+  `true` if the authenticated user has admin privileges in this picnic.
+</ResponseField>
+
+<ResponseField name="is_owner" type="boolean">
+  `true` if the authenticated user is the owner of this picnic.
+</ResponseField>
+
+---
+
+## Endpoints
+
+### List your picnics
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnics/get \
+  -H "Cookie: session=<your_session>"
+```
+</CodeGroup>
+
+`GET /api/picnics/get`
+
+Returns the list of picnic IDs you currently belong to.
+
+**Response `200`**
+
+```json
+[1, 5, 42]
+```
+
+An array of integer picnic IDs. Returns an empty array `[]` if you have not joined any picnics.
+
+---
+
+### Overview of your picnics
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnics/overview \
+  -H "Cookie: session=<your_session>"
+```
+</CodeGroup>
+
+`GET /api/picnics/overview`
+
+Returns full picnic summaries for every picnic you belong to, augmented with unread-post and last-activity metadata. Use this endpoint to populate a picnic sidebar or home screen.
+
+**Response `200`**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Morning Crew",
+    "avatar": "https://cdn.clody.example.com/avatars/1.png",
+    "members_count": 318,
+    "link": "morning-crew",
+    "data": {
+      "description": "Daily news and good vibes",
+      "pinned": 99,
+      "original": false
+    },
+    "supports_comments": true,
+    "is_member": true,
+    "is_admin": false,
+    "is_owner": false,
+    "unread": 4,
+    "last_at": 1718000000
+  }
+]
+```
+
+<ResponseField name="unread" type="integer">
+  Number of posts in this picnic you have not yet read.
+</ResponseField>
+
+<ResponseField name="last_at" type="integer">
+  Unix timestamp of the most recent post, or `0` if no posts exist yet.
+</ResponseField>
+
+---
+
+### Get a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/get \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1}'
+```
+</CodeGroup>
+
+`POST /api/picnic/get`
+
+Fetches the full summary for a single picnic by ID. You do not need to be a member to look up a picnic.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic to retrieve.
+</ParamField>
+
+**Response `200`** — a [Picnic object](#the-picnic-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `404` | `"Not Found"` | No picnic exists with that ID. |
+
+---
+
+### Search picnics
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/search \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "morning"}'
+```
+</CodeGroup>
+
+`POST /api/picnic/search`
+
+Searches all picnics by name using a case-insensitive substring match. Returns up to 50 results.
+
+**Request body**
+
+<ParamField body="name" type="string" required>
+  Substring to search for in picnic names. Whitespace-only strings return an empty array immediately.
+</ParamField>
+
+**Response `200`**
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Morning Crew",
+    ...
+  }
+]
+```
+
+An array of up to 50 [Picnic objects](#the-picnic-object) whose names contain the given substring.
+
+---
+
+### Create a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/create \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Morning Crew",
+    "link": "morning-crew",
+    "support_comments": true,
+    "description": "Daily news and good vibes"
+  }'
+```
+</CodeGroup>
+
+`POST /api/picnic/create`
+
+Creates a new picnic. You become the owner and are automatically added as the first admin and member.
+
+**Request body**
+
+<ParamField body="name" type="string" required>
+  Display name for the picnic. Maximum 30 characters; cannot be blank.
+</ParamField>
+
+<ParamField body="support_comments" type="boolean" required>
+  Set to `true` to allow members to comment on posts, or `false` to disable comments entirely.
+</ParamField>
+
+<ParamField body="link" type="string">
+  Custom URL slug (maximum 30 characters) used in the short-link `/@/<link>`. Must be globally unique. Omit or leave blank to skip assigning a custom link.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Short description shown on the picnic profile (maximum 50 characters).
+</ParamField>
+
+**Response `200`** — the newly created [Picnic object](#the-picnic-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Link is taken"` | Another picnic already uses that custom link. |
+| `403` | `"You have 3 or more warns"` | Your account has 3 or more active warnings and cannot create picnics. |
+
+<Note>
+  After a successful creation, all your connected sessions also receive an `added_picnic` Socket.IO event containing the new picnic summary.
+</Note>
+
+---
+
+### Edit a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/edit \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "id": 1,
+    "name": "Morning Crew ☀️",
+    "link": "morning-crew",
+    "support_comments": true,
+    "admins": [7, 12],
+    "description": "Updated description"
+  }'
+```
+</CodeGroup>
+
+`POST /api/picnic/edit`
+
+Updates a picnic's settings. **Only the owner can call this endpoint.** The owner is always kept in the `admins` list regardless of what you pass.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic to edit.
+</ParamField>
+
+<ParamField body="name" type="string" required>
+  New display name (maximum 30 characters).
+</ParamField>
+
+<ParamField body="support_comments" type="boolean" required>
+  Whether comment threads should be enabled on this picnic going forward.
+</ParamField>
+
+<ParamField body="admins" type="array of integers" required>
+  Complete list of member IDs to grant admin privileges. Non-members in this list are silently ignored. The owner is always prepended if not already present.
+</ParamField>
+
+<ParamField body="link" type="string | null">
+  New custom URL slug (maximum 30 characters), or `null` to remove the existing link.
+</ParamField>
+
+<ParamField body="description" type="string | null">
+  New description (maximum 50 characters), or `null` to clear it.
+</ParamField>
+
+**Response `200`** — the updated [Picnic object](#the-picnic-object).
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not the owner of this picnic. |
+| `403` | `"Link is taken"` | The requested link is already in use by another picnic. |
+
+<Note>
+  Every current member receives an `update_picnic` Socket.IO event with their personalised picnic summary immediately after a successful edit.
+</Note>
+
+---
+
+### Join a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/join \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1}'
+```
+</CodeGroup>
+
+`POST /api/picnic/join`
+
+Adds you as a member of the specified picnic.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic to join.
+</ParamField>
+
+**Response `200`** — the [Picnic object](#the-picnic-object) for the picnic you just joined.
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"You are banned"` | You are banned from this picnic. |
+| `403` | `"You are member"` | You are already a member. |
+
+---
+
+### Leave a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/leave \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1}'
+```
+</CodeGroup>
+
+`POST /api/picnic/leave`
+
+Removes you from the picnic's member and admin lists.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic to leave.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"You are owner"` | Owners cannot leave their own picnic. Transfer ownership or delete the picnic instead. |
+
+---
+
+### Delete a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/delete \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1}'
+```
+</CodeGroup>
+
+`POST /api/picnic/delete`
+
+Permanently deletes a picnic along with all its posts and comments. **Only the owner can delete a picnic.** This action is irreversible.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic to delete.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not the owner of this picnic. |
+
+<Warning>
+  Deleting a picnic removes all posts and comments permanently. Every current member receives a `deleted_picnic` Socket.IO event.
+</Warning>
+
+---
+
+### Manage a picnic
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/manage \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1}'
+```
+</CodeGroup>
+
+`POST /api/picnic/manage`
+
+Returns the full membership roster for a picnic, including bans. **Admins only.**
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic.
+</ParamField>
+
+**Response `200`**
+
+```json
+{
+  "members": [1, 7, 12, 99],
+  "admins": [1, 7],
+  "owner": 1,
+  "bans": [55]
+}
+```
+
+<ResponseField name="members" type="array of integers">
+  IDs of all current members.
+</ResponseField>
+
+<ResponseField name="admins" type="array of integers">
+  IDs of all users with admin privileges (always includes the owner).
+</ResponseField>
+
+<ResponseField name="owner" type="integer">
+  User ID of the picnic owner.
+</ResponseField>
+
+<ResponseField name="bans" type="array of integers">
+  IDs of users who have been banned from this picnic.
+</ResponseField>
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of this picnic. |
+
+---
+
+### Ban a member
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/ban \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1, "ban_id": 99}'
+```
+</CodeGroup>
+
+`POST /api/picnic/ban`
+
+Bans a user from a picnic. The banned user is removed from the member list and receives a `banned_from_picnic` Socket.IO event. **Admins only.**
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic.
+</ParamField>
+
+<ParamField body="ban_id" type="integer" required>
+  User ID of the member to ban.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of this picnic. |
+| `403` | `"Can't ban the owner"` | You cannot ban the picnic owner. |
+| `403` | `"Remove role Admin"` | The target user is an admin; remove their admin role before banning. |
+| `400` | `"Already banned"` | This user is already banned. |
+
+---
+
+### Unban a user
+
+<CodeGroup>
+```bash cURL
+curl https://clody.example.com/api/picnic/unban \
+  -X POST \
+  -H "Cookie: session=<your_session>" \
+  -H "Content-Type: application/json" \
+  -d '{"id": 1, "unban_id": 99}'
+```
+</CodeGroup>
+
+`POST /api/picnic/unban`
+
+Lifts a ban, allowing the user to rejoin the picnic. **Admins only.**
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  ID of the picnic.
+</ParamField>
+
+<ParamField body="unban_id" type="integer" required>
+  User ID of the banned user to unban.
+</ParamField>
+
+**Response `200`** — `"Success"`
+
+**Error responses**
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `403` | `"Forbidden"` | You are not an admin of this picnic. |
+| `404` | `"That is not banned"` | The specified user is not currently banned. |
+
+---
+
+## Short-link redirects
+
+Every picnic with a custom `link` value is reachable at `/@/<link>`. Navigating to that URL redirects the browser to `/app/picnics/<id>` — the standard in-app picnic page. This lets you share a memorable URL (e.g. `/@/morning-crew`) instead of a numeric ID.
+
+| Route | Behaviour |
+|-------|-----------|
+| `GET /@/<link>` | Redirects to `/app/picnics/<id>` for the picnic whose `link` matches. Returns `404` if no picnic has that link. |
+
+<Tip>
+  Custom links are set at creation time with the `link` field on `POST /api/picnic/create`, and can be updated or cleared via `POST /api/picnic/edit`.
+</Tip>
+
+---
+
+## Socket.IO events
+
+Your client receives these events over the active Socket.IO connection when picnic state changes.
+
+| Event | Payload | When |
+|-------|---------|------|
+| `added_picnic` | [Picnic object](#the-picnic-object) | You joined or created a picnic. |
+| `update_picnic` | [Picnic object](#the-picnic-object) | The picnic's settings were changed (name, link, admins, comments toggle, pinned message, etc.). |
+| `banned_from_picnic` | `{ "id": integer, "name": string }` | You were banned from a picnic. |
+| `deleted_picnic` | `{ "id": integer }` | A picnic you belonged to was deleted. |
+
+<Tip>
+  Each `update_picnic` payload is personalised — `is_member`, `is_admin`, and `is_owner` reflect the receiving user's relationship to the picnic, not the caller's.
+</Tip>

@@ -1,0 +1,271 @@
+---
+title: "Voice Calls API: Real-Time Audio in Clody Branches"
+sidebarTitle: "Voice Calls"
+description: "API reference for Clody voice calls. Covers REST endpoints for tokens and servers, and Socket.IO events for starting, joining, and managing calls."
+---
+
+Clody voice calls combine a small set of REST endpoints with a dedicated Socket.IO namespace (`/bcalls`). You use REST to look up available voice servers, fetch the current call state for a Branch, and obtain a short-lived token for the WebRTC layer. Everything else — starting, joining, leaving, and managing calls — happens over Socket.IO so participants receive updates in real time.
+
+---
+
+## The Call State Object
+
+All endpoints and events that describe an active call return the same call state object.
+
+<ResponseField name="id" type="integer">
+  The Branch ID this call belongs to.
+</ResponseField>
+
+<ResponseField name="members" type="array of integers">
+  User IDs of participants who are currently in the call.
+</ResponseField>
+
+<ResponseField name="waiting" type="array of integers">
+  User IDs of Branch members who were notified of the call but have not yet joined.
+</ResponseField>
+
+<ResponseField name="mic_off" type="array of integers">
+  User IDs of participants whose microphone is currently muted.
+</ResponseField>
+
+<ResponseField name="sharing_screen" type="object">
+  Maps each screen-sharing user ID (string key) to an array of watcher user IDs. Empty object when nobody is sharing.
+</ResponseField>
+
+<ResponseField name="server_addr" type="string | null">
+  Hostname of the voice server this call is running on (e.g. `"moscow.clody.lol"`). `null` if no server was specified when the call started.
+</ResponseField>
+
+---
+
+## REST Endpoints
+
+### List voice servers — `GET /api/calls/servers`
+
+Returns the available voice server regions. Call this before starting a call to let the user choose their preferred region.
+
+**Response `200`**
+
+```json
+{
+  "Moscow, RU": "moscow.clody.lol",
+  "Tel Aviv, IS": "israil.clody.lol"
+}
+```
+
+The keys are human-readable region labels; the values are the hostnames you pass as `server_addr` when emitting `start_call`.
+
+---
+
+### Get call state — `POST /api/calls/get`
+
+Returns the current call state for a Branch, or `null` if there is no active call.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  Branch ID to check.
+</ParamField>
+
+**Response `200`** — call state object, or `null`.
+
+```json
+{
+  "id": 12,
+  "members": [5, 9],
+  "waiting": [14],
+  "mic_off": [9],
+  "sharing_screen": {},
+  "server_addr": "moscow.clody.lol"
+}
+```
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `403`  | You are not a member of this Branch. |
+
+---
+
+### Get a call token — `POST /api/calls/token`
+
+Issues a short-lived token that authorises you to connect to the voice server's WebRTC layer for the specified Branch call.
+
+**Request body**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the active call you want to join.
+</ParamField>
+
+**Response `200`**
+
+```json
+{ "token": "eyJ..." }
+```
+
+<ResponseField name="token" type="string">
+  A signed token to pass to the voice server when establishing your WebRTC connection.
+</ResponseField>
+
+**Error responses**
+
+| Status | Meaning |
+|--------|---------|
+| `403`  | You are not a member of this Branch. |
+
+<Tip>
+  Fetch a fresh token each time you join a call. Tokens are scoped to your user ID and the specific Branch, so you cannot reuse a token across calls.
+</Tip>
+
+---
+
+## Socket.IO — Main `/` Namespace
+
+### Client → Server Events
+
+#### `start_call`
+
+Starts a new voice call in a Branch. Emit this event on the **main `/` namespace** (not `/bcalls`). Every other Branch member is placed in the `waiting` list and receives a `new_call` event.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID to start the call in.
+</ParamField>
+
+<ParamField body="server_addr" type="string">
+  Hostname of the preferred voice server (must be a value from `GET /api/calls/servers`). Omit to start without a designated server.
+</ParamField>
+
+**Server emits back to you:** `started_call` with the new call state object.  
+**Server emits to other members:** `new_call` with the call state object.
+
+**Errors emitted:** `error` — if the Branch already has an active call, if you are not a member, or if `server_addr` is not a recognised server.
+
+---
+
+## Socket.IO — `/bcalls` Namespace
+
+Connect to the `/bcalls` namespace with your session cookie before emitting any in-call events. The server automatically adds you to the Socket.IO room for any call you are already a member of.
+
+### Client → Server Events
+
+#### `join_call`
+
+Moves you from the `waiting` list into `members`, effectively picking up the call.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the call to join.
+</ParamField>
+
+**Server emits:** `update` to all current call members with the updated call state.
+
+---
+
+#### `leave_call`
+
+Removes you from the call. If you are the last member, the call ends and all waiting users receive a `stop_call` event.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the call to leave.
+</ParamField>
+
+**Server emits:** `update` to remaining members, or `stop_call` to any waiting users if the call ends.
+
+---
+
+#### `reject_call`
+
+Removes you from the `waiting` list without joining the call.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the call to reject.
+</ParamField>
+
+**Server emits:** `update` to current call members reflecting the updated waiting list.
+
+---
+
+#### `mic_toggle`
+
+Mutes or unmutes your microphone. Your user ID is added to or removed from the `mic_off` array accordingly.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the call.
+</ParamField>
+
+<ParamField body="off" type="boolean" required>
+  `true` to mute; `false` to unmute.
+</ParamField>
+
+**Server emits:** `update` to all call members.
+
+---
+
+#### `toggle_screen_sharing`
+
+Starts or stops your screen share. When you start sharing, an empty watcher list is created for you. When you stop, the entry is removed.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the call.
+</ParamField>
+
+<ParamField body="off" type="boolean" required>
+  `false` to start sharing; `true` to stop sharing.
+</ParamField>
+
+**Server emits:** `update` to all call members.
+
+---
+
+#### `toggle_watching_screen_sharing`
+
+Registers or unregisters you as a watcher of another participant's screen share.
+
+**Payload**
+
+<ParamField body="id" type="integer" required>
+  Branch ID of the call.
+</ParamField>
+
+<ParamField body="off" type="boolean" required>
+  `false` to start watching; `true` to stop watching.
+</ParamField>
+
+<ParamField body="author" type="integer" required>
+  User ID of the participant whose screen you want to watch or stop watching.
+</ParamField>
+
+**Server emits:** `update` to all call members.
+
+---
+
+### Server → Client Events (`/bcalls` namespace)
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `update` | Call state object | Any change to call state — members joining/leaving, mic toggles, screen sharing changes. |
+| `error` | `{ cause: string }` | An action you attempted failed (e.g. not a member, call already exists). |
+
+---
+
+### Server → Client Events (main `/` namespace)
+
+These events are delivered on the main Socket.IO connection (`/`), not on `/bcalls`.
+
+| Event | Payload | When it fires |
+|-------|---------|---------------|
+| `new_call` | Call state object | A call started in a Branch you belong to — you are being called. |
+| `started_call` | Call state object | Confirmation that the call you just started is active. Sent in response to emitting `start_call` on the main namespace. |
+| `stop_call` | `{ id: integer }` | The call in Branch `id` has ended (last member left). |

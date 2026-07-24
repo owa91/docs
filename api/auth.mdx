@@ -1,0 +1,353 @@
+---
+title: "Clody Authentication API: Register, Login, and Sessions"
+sidebarTitle: "Authentication"
+description: "Complete reference for Clody authentication endpoints. Register, log in via email code, verify email, check session state, and log out."
+---
+
+Clody uses **session cookie authentication** — there are no API keys. When you register or log in, the server sets an `HttpOnly`, `Secure`, `SameSite=Lax` cookie that lasts 30 days. You include that cookie automatically with every subsequent request. Most endpoints require both a valid session and a verified email address; if you haven't linked an email yet, those routes return `400 Not Authorized` until you complete the email verification flow.
+
+---
+
+## POST /api/register
+
+Creates a new account and immediately sets a session cookie, logging you in.
+
+<Warning>
+  The `username` value `clody` (case-insensitive) is reserved for the system user and cannot be registered.
+</Warning>
+
+<Warning>
+  This endpoint is rate-limited to **5 requests per minute** (burst cap of 3). Exceeding the limit returns `429`.
+</Warning>
+
+### Request body
+
+<ParamField body="username" type="string" required>
+  Your desired username. Must be non-empty after trimming whitespace.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Your account password. Must be non-empty.
+</ParamField>
+
+<ParamField body="token" type="string" required>
+  A reCAPTCHA v2 response token obtained from the Google reCAPTCHA widget on the registration page.
+</ParamField>
+
+```bash
+curl -c cookies.txt -X POST https://clody.lol/api/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "ada",
+    "password": "hunter2",
+    "token": "<recaptcha_response_token>"
+  }'
+```
+
+### Response
+
+`200 OK` — `"Success"`. A session cookie is set on the response; your client is now logged in.
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Bad Request"` | One or more required fields are missing or empty. |
+| `403` | `"Username is taken"` | Another account already uses that username, or you submitted `clody`. |
+| `403` | `"You are bot"` | The reCAPTCHA token failed verification. |
+| `503` | `"Recaptcha doesn't work"` | The reCAPTCHA service returned an unexpected error. |
+
+---
+
+## POST /api/verification/login
+
+Validates your username and password, then sends a one-time login code to the email address linked to your account. You pass that code to `POST /api/login` to complete sign-in.
+
+<Note>
+  If your account has no linked email, credentials are accepted immediately and the server returns `{"logged_in": true, "needs_email": true}` with a session cookie already set. You should then call `POST /api/verification/set_email` to link one.
+</Note>
+
+<Warning>
+  Once a code has been sent for a given account, you must wait **60 seconds** before requesting a new one. Calling again before the cooldown expires returns `429` with the remaining wait time.
+</Warning>
+
+### Request body
+
+<ParamField body="username" type="string" required>
+  The username of the account you want to log in to.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The account password.
+</ParamField>
+
+```bash
+curl -X POST https://clody.lol/api/verification/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "ada",
+    "password": "hunter2"
+  }'
+```
+
+### Response
+
+`200 OK` — one of two shapes:
+
+**Account has a linked email** — code sent, awaiting `POST /api/login`:
+
+<ResponseField name="email_hint" type="string">
+  A masked version of the destination address, e.g. `a**@example.com`. Use this to remind the user which inbox to check.
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Seconds until the code expires. Always `600` (10 minutes).
+</ResponseField>
+
+```json
+{
+  "email_hint": "a**@example.com",
+  "expires_in": 600
+}
+```
+
+**Account has no linked email** — session set immediately:
+
+```json
+{
+  "logged_in": true,
+  "needs_email": true
+}
+```
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Bad Request"` | `username` or `password` is missing. |
+| `403` | `"Incorrect username or password"` | Credentials did not match any account. |
+| `429` | `"You can generate a new code in N sec."` | Resend cooldown active; wait the indicated number of seconds. |
+
+---
+
+## POST /api/login
+
+Completes the login flow by exchanging the one-time code that was emailed to you for a session cookie.
+
+<Warning>
+  This endpoint is rate-limited to **10 requests per minute** (burst cap of 5). After **5 failed code attempts** for the same username the pending code is invalidated and you must restart from `POST /api/verification/login`.
+</Warning>
+
+### Request body
+
+<ParamField body="username" type="string" required>
+  The same username you passed to `POST /api/verification/login`.
+</ParamField>
+
+<ParamField body="code" type="string" required>
+  The 4-digit code from the login email, e.g. `"0391"`.
+</ParamField>
+
+```bash
+curl -c cookies.txt -X POST https://clody.lol/api/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "ada",
+    "code": "0391"
+  }'
+```
+
+### Response
+
+`200 OK` — `"Success"`. A session cookie is set and you are now logged in.
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Bad Request"` | `username` or `code` is missing. |
+| `403` | *(request a code first)* | No pending login code exists for this username. Call `POST /api/verification/login` first. |
+| `403` | *(code expired)* | The code expired (10-minute TTL). Request a new one via `POST /api/verification/login`. |
+| `403` | *(wrong code)* | Wrong code; your remaining attempts for this code have decreased. |
+| `403` | *(too many attempts)* | Five wrong attempts exhausted; the code is invalidated. Restart from `POST /api/verification/login`. |
+| `404` | `"Not Found"` | The user account no longer exists. |
+
+---
+
+## GET /api/session
+
+Returns the current authentication state for the cookie your client sends. This endpoint **always** returns `200` — a missing or invalid session is represented as data, not as an HTTP error, so you can safely call it on every page load without treating a `4xx` as a failure.
+
+```bash
+curl -b cookies.txt https://clody.lol/api/session
+```
+
+### Response
+
+<ResponseField name="authenticated" type="boolean">
+  `true` if the request carries a valid, unexpired session cookie; `false` otherwise.
+</ResponseField>
+
+<ResponseField name="verified" type="boolean">
+  `true` if the authenticated account has a confirmed email address. Many API endpoints require `verified: true`.
+</ResponseField>
+
+<ResponseField name="username" type="string">
+  Present only when `authenticated` is `true`. The username of the logged-in account.
+</ResponseField>
+
+```json
+{
+  "authenticated": true,
+  "verified": true,
+  "username": "ada"
+}
+```
+
+Unauthenticated response:
+
+```json
+{
+  "authenticated": false,
+  "verified": false
+}
+```
+
+---
+
+## POST /api/verification/set_email
+
+Begins the email verification flow by sending a 4-digit confirmation code to the address you supply. Pass the code to `POST /api/verification` to confirm.
+
+<Note>
+  You must be logged in to call this endpoint. Accounts that already have a verified email address cannot change it — the response will be `403 "Email is linked"`.
+</Note>
+
+<Warning>
+  A **60-second resend cooldown** applies. If you call this endpoint again before the cooldown expires, you receive `429` with the remaining wait time. Codes expire after **10 minutes** and you get at most **5 attempts** to enter each code before it is discarded.
+</Warning>
+
+<Warning>
+  This endpoint is rate-limited to **5 requests per minute** (burst cap of 3).
+</Warning>
+
+### Request body
+
+<ParamField body="email" type="string" required>
+  A valid email address (max 254 characters). Must not already be linked to another Clody account.
+</ParamField>
+
+```bash
+curl -b cookies.txt -X POST https://clody.lol/api/verification/set_email \
+  -H "Content-Type: application/json" \
+  -d '{"email": "ada@example.com"}'
+```
+
+### Response
+
+`200 OK`:
+
+<ResponseField name="email" type="string">
+  The normalised (lowercased, trimmed) email address the code was sent to.
+</ResponseField>
+
+<ResponseField name="expires_in" type="number">
+  Seconds until the code expires. Always `600` (10 minutes).
+</ResponseField>
+
+```json
+{
+  "email": "ada@example.com",
+  "expires_in": 600
+}
+```
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Bad Request"` | Email field is missing, malformed, or exceeds 254 characters. |
+| `400` | `"Not Authorized"` | No valid session cookie. |
+| `403` | `"Email is linked"` | Your account already has a confirmed email. |
+| `403` | `"This email is taken"` | Another account has already verified this address. |
+| `429` | `"You can generate a new code in N sec."` | Resend cooldown is active. |
+| `503` | *(delivery error)* | The email delivery service returned an unexpected error. Wait a moment and try again. |
+
+---
+
+## POST /api/verification
+
+Confirms your email address by submitting the code that was sent via `POST /api/verification/set_email`.
+
+### Request body
+
+<ParamField body="code" type="string" required>
+  The 4-digit code from the verification email, e.g. `"7142"`.
+</ParamField>
+
+```bash
+curl -b cookies.txt -X POST https://clody.lol/api/verification \
+  -H "Content-Type: application/json" \
+  -d '{"code": "7142"}'
+```
+
+### Response
+
+`200 OK` — `"Success"`. Your email is now confirmed and `GET /api/session` will return `verified: true`.
+
+<Note>
+  Confirming your email invalidates all other active sessions for your account (a new `login_at` timestamp is issued). Your current session remains valid.
+</Note>
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Bad Request"` | `code` field is missing. |
+| `400` | `"Not Authorized"` | No valid session cookie. |
+| `403` | *(no pending code)* | No pending verification code found. Call `POST /api/verification/set_email` first. |
+| `403` | `"Time is up"` | The code expired (10-minute TTL). Request a new one via `POST /api/verification/set_email`. |
+| `403` | *(wrong code)* | Wrong code; your remaining attempts for this code have decreased. |
+| `403` | `"Too many requests"` | Five wrong attempts exhausted; the code is discarded. Request a new one. |
+
+---
+
+## POST /api/logout
+
+Clears your current session. The session cookie remains on the client but the server-side record is invalidated.
+
+```bash
+curl -b cookies.txt -c cookies.txt -X POST https://clody.lol/api/logout
+```
+
+### Response
+
+`200 OK` — `"Success"`.
+
+<Tip>
+  This endpoint only ends the current session. To invalidate every active session across all your devices at once, use `POST /api/settings/logout_all_devices` instead.
+</Tip>
+
+---
+
+## POST /api/settings/logout_all_devices
+
+Invalidates **all** active sessions for your account simultaneously. Every device that holds a session cookie for your account is logged out and receives a `logout` Socket.IO event.
+
+<Note>
+  You must be logged in with a verified email to call this endpoint.
+</Note>
+
+```bash
+curl -b cookies.txt -X POST https://clody.lol/api/settings/logout_all_devices
+```
+
+### Response
+
+`200 OK` — `"Success"`. All sessions — including the one used to make this request — are immediately invalidated. Re-authenticate via the normal login flow to continue using the API.
+
+### Error codes
+
+| Status | Body | Meaning |
+|--------|------|---------|
+| `400` | `"Not Authorized"` | No valid or verified session cookie. |

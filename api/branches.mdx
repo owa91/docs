@@ -1,0 +1,456 @@
+---
+title: "Branches API: Group and Direct Message Conversations"
+sidebarTitle: "Branches"
+description: "API reference for Clody Branches — private chats and group conversations. Create, rename, add/remove members, and retrieve branch details."
+---
+
+Branches are Clody's fundamental unit of conversation. A branch can be a one-on-one direct message (`ispm: true`) or a multi-member group chat. Every branch tracks its members, owner, optional display name, and arbitrary metadata. All endpoints on this page require an authenticated, verified session cookie — unauthenticated requests return `400 "Not Authorized"`.
+
+---
+
+## Branch Object
+
+Every branch endpoint that returns a branch returns the following shape:
+
+<ResponseField name="id" type="integer">
+  Unique identifier of the branch.
+</ResponseField>
+
+<ResponseField name="members" type="array of integers">
+  List of user IDs who currently belong to this branch.
+</ResponseField>
+
+<ResponseField name="data" type="string">
+  Arbitrary metadata stored on the branch, serialized as a JSON string. Parse this value with `JSON.parse()` (or your language's equivalent) before accessing its contents.
+</ResponseField>
+
+<ResponseField name="ispm" type="boolean">
+  `true` when this branch is a private 1-on-1 direct message. You cannot add additional members to a PM branch.
+</ResponseField>
+
+<ResponseField name="owner" type="integer">
+  User ID of the branch owner. Only the owner can kick members.
+</ResponseField>
+
+<ResponseField name="name" type="string | null">
+  Display name of the branch, or `null` if none has been set.
+</ResponseField>
+
+---
+
+## GET /api/branches/get
+
+Retrieve the list of branch IDs that the currently authenticated user belongs to. Use this as a lightweight membership check before fetching full branch details.
+
+**No request body required.**
+
+<Note>
+  This endpoint uses `GET` — do not send a request body.
+</Note>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branches/get \
+  --cookie "session=<your_session_cookie>"
+```
+
+### Example Response
+
+```json
+[1, 4, 17, 42]
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+
+---
+
+## GET /api/branches/overview
+
+Fetch a summary of every branch the current user belongs to, enriched with unread message count and last activity timestamp. Ideal for building sidebar or inbox list views without fetching each branch individually.
+
+**No request body required.**
+
+<Tip>
+  Use `unread` to display notification badges and `last_at` to sort branches by most recent activity.
+</Tip>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branches/overview \
+  --cookie "session=<your_session_cookie>"
+```
+
+### Example Response
+
+```json
+[
+  {
+    "id": 4,
+    "members": [101, 202],
+    "data": "",
+    "ispm": true,
+    "owner": 101,
+    "name": null,
+    "unread": 3,
+    "last_at": 1718000000
+  },
+  {
+    "id": 17,
+    "members": [101, 202, 303],
+    "data": "",
+    "ispm": false,
+    "owner": 101,
+    "name": "Team Chat",
+    "unread": 0,
+    "last_at": 1717995600
+  }
+]
+```
+
+### Additional Response Fields
+
+<ResponseField name="unread" type="integer">
+  Number of messages in this branch that you have not yet read (authored by other members).
+</ResponseField>
+
+<ResponseField name="last_at" type="integer">
+  Unix timestamp of the most recent message in this branch. Returns `0` if the branch has no messages.
+</ResponseField>
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+
+---
+
+## POST /api/branch/get
+
+Fetch the full branch object for a single branch by its ID. You must be a member of the branch to retrieve it.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the branch to retrieve.
+</ParamField>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branch/get \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 4 }'
+```
+
+### Example Response
+
+```json
+{
+  "id": 4,
+  "members": [101, 202],
+  "data": "",
+  "ispm": true,
+  "owner": 101,
+  "name": null
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` was not provided. |
+| `403` | `"Forbidden"` | You are not a member of this branch. |
+| `404` | `"Not Found"` | No branch exists with the given ID. |
+
+---
+
+## POST /api/branch/create
+
+Create a new branch. You are automatically set as the owner and added as the first member. All users you pass in `members` must already be in your friends list.
+
+### Request Body
+
+<ParamField body="members" type="array of integers" required>
+  User IDs to add to the branch alongside yourself. Every user in this list must be your friend. Pass an empty array (`[]`) to create a branch with only yourself.
+</ParamField>
+
+<ParamField body="ispm" type="boolean" required>
+  Set to `true` to create a private 1-on-1 direct message branch. PM branches cannot have additional members added later.
+</ParamField>
+
+<ParamField body="name" type="string">
+  Optional display name for the branch. Omit or pass `null` for no name. Names are most useful for group chats.
+</ParamField>
+
+<Warning>
+  When `ispm` is `true`, the branch is locked to exactly the members specified at creation time — you cannot call `/api/branch/add_member` on it afterward.
+</Warning>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branch/create \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "members": [202, 303],
+    "ispm": false,
+    "name": "Design Squad"
+  }'
+```
+
+### Example Response
+
+```json
+{
+  "id": 53,
+  "members": [101, 202, 303],
+  "data": "",
+  "ispm": false,
+  "owner": 101,
+  "name": "Design Squad"
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `members` or `ispm` was not provided. |
+| `403` | `"Anybody isn't friend"` | At least one user in `members` is not in your friends list. |
+| `404` | `"<id> hasn't found"` | A user ID in `members` does not exist. |
+
+### Socket.IO Events Emitted
+
+When a branch is created, every member (including you) receives the `added_branch` event:
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `added_branch` | Branch object | Fired on each member's socket connection when they are added to a branch. |
+
+---
+
+## POST /api/branch/rename
+
+Change the display name of a branch. You must be a member of the branch. Pass `null` as `name` to clear the current name.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the branch to rename.
+</ParamField>
+
+<ParamField body="name" type="string | null" required>
+  The new display name, or `null` to remove the existing name.
+</ParamField>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branch/rename \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 53, "name": "Frontend Team" }'
+```
+
+### Example Response
+
+```json
+{
+  "id": 53,
+  "members": [101, 202, 303],
+  "data": "",
+  "ispm": false,
+  "owner": 101,
+  "name": "Frontend Team"
+}
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` was not provided. |
+| `403` | `"Forbidden"` | You are not a member of this branch. |
+| `404` | `"Not Found"` | No branch exists with the given ID. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `update_branch` | `{ "branch_id": <int> }` | Fired on every member's socket when the branch is renamed. |
+
+---
+
+## POST /api/branch/add_member
+
+Add a new member to an existing group branch. You must be a current member of the branch, the user you are adding must be your friend, and the branch must not be a PM (`ispm: false`).
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the branch to add the member to.
+</ParamField>
+
+<ParamField body="member" type="integer" required>
+  The user ID of the person to add.
+</ParamField>
+
+<Warning>
+  You cannot add members to a PM branch (`ispm: true`). Attempting to do so returns `403 "This is PM"`.
+</Warning>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branch/add_member \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 53, "member": 404 }'
+```
+
+### Example Response
+
+```json
+"Success"
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` or `member` was not provided. |
+| `403` | `"Forbidden"` | You are not a member of this branch. |
+| `403` | `"This isn't your friend"` | The target user is not in your friends list. |
+| `403` | `"This is PM"` | The branch is a PM; members cannot be added. |
+| `404` | `"Not Found"` | The branch or the target user does not exist. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `added_branch` | Branch object | Fired on the newly added member's socket. |
+
+---
+
+## POST /api/branch/kick
+
+Remove a member from a branch. You must be the branch owner. You cannot kick yourself (use `/api/branch/leave` instead).
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the branch.
+</ParamField>
+
+<ParamField body="member" type="integer" required>
+  The user ID of the member to remove.
+</ParamField>
+
+<Note>
+  Only the branch owner can kick members. If you need to remove yourself, use `/api/branch/leave`.
+</Note>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branch/kick \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 53, "member": 303 }'
+```
+
+### Example Response
+
+```json
+"Success"
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` or `member` was not provided. |
+| `400` | `"Can't kick the owner"` | You attempted to kick yourself (the owner). |
+| `403` | `"Forbidden"` | You are not the branch owner. |
+| `404` | `"Not Found"` | The branch or the target user does not exist. |
+| `404` | `"That is not a member"` | The target user exists but is not a member of this branch. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `kicked_from_branch` | `{ "id": <branch_id>, "name": <branch_name> }` | Fired on the kicked member's socket. |
+
+---
+
+## POST /api/branch/leave
+
+Leave a branch voluntarily. The branch owner cannot leave — you must transfer ownership or delete the branch first.
+
+### Request Body
+
+<ParamField body="id" type="integer" required>
+  The ID of the branch to leave.
+</ParamField>
+
+<Warning>
+  If you are the branch owner, you cannot leave. The server returns `400 "You are owner"`. Ownership transfer is required before leaving.
+</Warning>
+
+### Example Request
+
+```bash
+curl https://your-clody-instance.com/api/branch/leave \
+  --cookie "session=<your_session_cookie>" \
+  -H "Content-Type: application/json" \
+  -d '{ "id": 53 }'
+```
+
+### Example Response
+
+```json
+"Success"
+```
+
+### Error Codes
+
+| Status | Message | Description |
+|--------|---------|-------------|
+| `400` | `"Not Authorized"` | Missing or invalid session cookie. |
+| `400` | `"Bad Request"` | `id` was not provided. |
+| `400` | `"You are owner"` | You are the branch owner and cannot leave. |
+| `404` | `"Not Found"` | No branch exists with the given ID. |
+
+### Socket.IO Events Emitted
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `left_branch` | `{ "id": <branch_id>, "member": <display_name> }` | Fired on every remaining member's socket when someone leaves. |
+
+---
+
+## Socket.IO Event Reference
+
+The following real-time events relate to branch membership and metadata changes. Subscribe to these on your Socket.IO client to keep your UI in sync without polling.
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `added_branch` | Branch object | You were added to a branch (on creation or via `add_member`). |
+| `update_branch` | `{ "branch_id": integer }` | A branch you belong to was renamed. Re-fetch the branch to get the updated name. |
+| `kicked_from_branch` | `{ "id": integer, "name": string \| null }` | You were removed from a branch by the owner. |
+| `left_branch` | `{ "id": integer, "member": string }` | A member left a branch you belong to. `member` is their display name. |
