@@ -4,6 +4,12 @@ sidebarTitle: "Picnics"
 description: "API reference for Clody Picnics — community channels with owner, admin, and member roles. Create, search, join, edit, moderate, and delete picnics."
 ---
 
+<Check>
+  **Bot authentication** is accepted on read endpoints (`GET /api/picnics/get`, `GET /api/picnics/overview`, `POST /api/picnic/get`, `POST /api/picnic/search`, `POST /api/picnic/comments`, and the `/@/<link>` short-link resolver) via the `Authorization: <user_id> <token>` header.
+
+  It is **rejected** on all lifecycle and moderation endpoints (`create`, `edit`, `join`, `leave`, `delete`, `ban`, `unban`, `manage`, `set_original`) — those return `400 Not Authorized` when called with a bot token. A human owner must create the picnic and use `manage` to promote the bot to admin. See the [Bots guide](/guides/bots).
+</Check>
+
 Picnics are Clody's public community channels. Anyone can discover and join a picnic; once inside, admins post the content and members engage through comments. Every picnic has exactly one owner (its creator), one or more admins (including the owner), and any number of members. This page covers all endpoints for creating and managing picnics, as well as the real-time Socket.IO events your client receives as picnic state changes.
 
 ---
@@ -73,10 +79,12 @@ The `picnic_summary` shape is returned by most endpoints on this page.
 ### List your picnics
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnics/get \
   -H "Cookie: session=<your_session>"
 ```
+
 </CodeGroup>
 
 `GET /api/picnics/get`
@@ -96,10 +104,12 @@ An array of integer picnic IDs. Returns an empty array `[]` if you have not join
 ### Overview of your picnics
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnics/overview \
   -H "Cookie: session=<your_session>"
 ```
+
 </CodeGroup>
 
 `GET /api/picnics/overview`
@@ -144,6 +154,7 @@ Returns full picnic summaries for every picnic you belong to, augmented with unr
 ### Get a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/get \
   -X POST \
@@ -151,6 +162,7 @@ curl https://clody.example.com/api/picnic/get \
   -H "Content-Type: application/json" \
   -d '{"id": 1}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/get`
@@ -168,7 +180,7 @@ Fetches the full summary for a single picnic by ID. You do not need to be a memb
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `404` | `"Not Found"` | No picnic exists with that ID. |
 
 ---
@@ -176,6 +188,7 @@ Fetches the full summary for a single picnic by ID. You do not need to be a memb
 ### Search picnics
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/search \
   -X POST \
@@ -183,6 +196,7 @@ curl https://clody.example.com/api/picnic/search \
   -H "Content-Type: application/json" \
   -d '{"name": "morning"}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/search`
@@ -214,6 +228,7 @@ An array of up to 50 [Picnic objects](#the-picnic-object) whose names contain th
 ### Create a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/create \
   -X POST \
@@ -226,6 +241,7 @@ curl https://clody.example.com/api/picnic/create \
     "description": "Daily news and good vibes"
   }'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/create`
@@ -255,7 +271,7 @@ Creates a new picnic. You become the owner and are automatically added as the fi
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Link is taken"` | Another picnic already uses that custom link. |
 | `403` | `"You have 3 or more warns"` | Your account has 3 or more active warnings and cannot create picnics. |
 
@@ -268,6 +284,7 @@ Creates a new picnic. You become the owner and are automatically added as the fi
 ### Edit a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/edit \
   -X POST \
@@ -282,6 +299,7 @@ curl https://clody.example.com/api/picnic/edit \
     "description": "Updated description"
   }'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/edit`
@@ -319,7 +337,7 @@ Updates a picnic's settings. **Only the owner can call this endpoint.** The owne
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not the owner of this picnic. |
 | `403` | `"Link is taken"` | The requested link is already in use by another picnic. |
 
@@ -332,6 +350,7 @@ Updates a picnic's settings. **Only the owner can call this endpoint.** The owne
 ### Join a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/join \
   -X POST \
@@ -339,6 +358,7 @@ curl https://clody.example.com/api/picnic/join \
   -H "Content-Type: application/json" \
   -d '{"id": 1}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/join`
@@ -356,7 +376,7 @@ Adds you as a member of the specified picnic.
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"You are banned"` | You are banned from this picnic. |
 | `403` | `"You are member"` | You are already a member. |
 
@@ -365,6 +385,7 @@ Adds you as a member of the specified picnic.
 ### Leave a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/leave \
   -X POST \
@@ -372,6 +393,7 @@ curl https://clody.example.com/api/picnic/leave \
   -H "Content-Type: application/json" \
   -d '{"id": 1}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/leave`
@@ -389,7 +411,7 @@ Removes you from the picnic's member and admin lists.
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `400` | `"You are owner"` | Owners cannot leave their own picnic. Transfer ownership or delete the picnic instead. |
 
 ---
@@ -397,6 +419,7 @@ Removes you from the picnic's member and admin lists.
 ### Delete a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/delete \
   -X POST \
@@ -404,6 +427,7 @@ curl https://clody.example.com/api/picnic/delete \
   -H "Content-Type: application/json" \
   -d '{"id": 1}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/delete`
@@ -421,7 +445,7 @@ Permanently deletes a picnic along with all its posts and comments. **Only the o
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not the owner of this picnic. |
 
 <Warning>
@@ -433,6 +457,7 @@ Permanently deletes a picnic along with all its posts and comments. **Only the o
 ### Manage a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/manage \
   -X POST \
@@ -440,6 +465,7 @@ curl https://clody.example.com/api/picnic/manage \
   -H "Content-Type: application/json" \
   -d '{"id": 1}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/manage`
@@ -482,7 +508,7 @@ Returns the full membership roster for a picnic, including bans. **Admins only.*
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of this picnic. |
 
 ---
@@ -490,6 +516,7 @@ Returns the full membership roster for a picnic, including bans. **Admins only.*
 ### Ban a member
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/ban \
   -X POST \
@@ -497,6 +524,7 @@ curl https://clody.example.com/api/picnic/ban \
   -H "Content-Type: application/json" \
   -d '{"id": 1, "ban_id": 99}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/ban`
@@ -518,7 +546,7 @@ Bans a user from a picnic. The banned user is removed from the member list and r
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of this picnic. |
 | `403` | `"Can't ban the owner"` | You cannot ban the picnic owner. |
 | `403` | `"Remove role Admin"` | The target user is an admin; remove their admin role before banning. |
@@ -529,6 +557,7 @@ Bans a user from a picnic. The banned user is removed from the member list and r
 ### Unban a user
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/picnic/unban \
   -X POST \
@@ -536,6 +565,7 @@ curl https://clody.example.com/api/picnic/unban \
   -H "Content-Type: application/json" \
   -d '{"id": 1, "unban_id": 99}'
 ```
+
 </CodeGroup>
 
 `POST /api/picnic/unban`
@@ -557,7 +587,7 @@ Lifts a ban, allowing the user to rejoin the picnic. **Admins only.**
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of this picnic. |
 | `404` | `"That is not banned"` | The specified user is not currently banned. |
 
@@ -568,7 +598,7 @@ Lifts a ban, allowing the user to rejoin the picnic. **Admins only.**
 Every picnic with a custom `link` value is reachable at `/@/<link>`. Navigating to that URL redirects the browser to `/app/picnics/<id>` — the standard in-app picnic page. This lets you share a memorable URL (e.g. `/@/morning-crew`) instead of a numeric ID.
 
 | Route | Behaviour |
-|-------|-----------|
+| --- | --- |
 | `GET /@/<link>` | Redirects to `/app/picnics/<id>` for the picnic whose `link` matches. Returns `404` if no picnic has that link. |
 
 <Tip>
@@ -582,7 +612,7 @@ Every picnic with a custom `link` value is reachable at `/@/<link>`. Navigating 
 Your client receives these events over the active Socket.IO connection when picnic state changes.
 
 | Event | Payload | When |
-|-------|---------|------|
+| --- | --- | --- |
 | `added_picnic` | [Picnic object](#the-picnic-object) | You joined or created a picnic. |
 | `update_picnic` | [Picnic object](#the-picnic-object) | The picnic's settings were changed (name, link, admins, comments toggle, pinned message, etc.). |
 | `banned_from_picnic` | `{ "id": integer, "name": string }` | You were banned from a picnic. |
