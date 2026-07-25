@@ -4,6 +4,10 @@ sidebarTitle: "Settings"
 description: "Read and update your Clody profile settings including display name, avatar, bio, accent color, status text, and privacy preferences."
 ---
 
+<Warning>
+  **Bots are not allowed** on the Settings API. Both `GET /api/settings/get` and `POST /api/settings/set` reject bot `Authorization` headers with `400 Not Authorized`. To edit a bot's profile (display name, avatar, description), use the bot management endpoints instead — see [Bots API](/api/bots).
+</Warning>
+
 The Settings API gives you full control over your Clody profile and privacy preferences. Use `GET /api/settings/get` to read your current configuration, and `POST /api/settings/set` to update any combination of fields in a single request. You must be logged in with a verified email address to use either endpoint.
 
 ---
@@ -71,7 +75,7 @@ curl -b cookies.txt https://clody.lol/api/settings/get
 ### Error codes
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | No valid or verified session cookie. |
 
 ---
@@ -137,7 +141,7 @@ curl -b cookies.txt -X POST https://clody.lol/api/settings/set \
 ### Error codes
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | No valid or verified session cookie. |
 | `400` | `"Too Long"` | `description` exceeds 300 characters or `thought` exceeds 100 characters. |
 | `400` | `"Bad Color"` | `color` is not a valid `#RGB` or `#RRGGBB` hex string. |
