@@ -4,6 +4,10 @@ sidebarTitle: "Reactions"
 description: "API reference for Clody emoji reactions on Branch messages and Picnic posts. Add, list, and remove reactions with real-time Socket.IO updates."
 ---
 
+<Check>
+  **Bot is allowed** — every endpoint on this page accepts bot authentication via the `Authorization: <user_id> <token>` header. See the [Bots guide](/guides/bots).
+</Check>
+
 Clody lets you attach emoji reactions to both Branch messages and Picnic posts. Each reaction is tied to a specific message, an emoji character, and the user who placed it. When you add or remove a reaction, Clody broadcasts a Socket.IO event to every member of the relevant channel so all clients stay in sync instantly.
 
 ## The Reaction Object
@@ -73,9 +77,9 @@ An object whose keys are message ID strings and whose values are arrays of react
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `403`  | You are not a member of the channel that contains this message. |
-| `404`  | The specified message does not exist. |
+| --- | --- |
+| `403` | You are not a member of the channel that contains this message. |
+| `404` | The specified message does not exist. |
 
 ---
 
@@ -106,17 +110,17 @@ Adds an emoji reaction to a message. If you have already reacted with that emoji
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
-| `400`  | `"This isn't emoji"` | The value you passed for `emoji` is not a recognised Unicode emoji. |
-| `400`  | `"Too many reactions"` | The message already has 50 reactions. |
-| `403`  | — | You are not a member of the channel. |
-| `404`  | — | The message does not exist. |
+| --- | --- | --- |
+| `400` | `"This isn't emoji"` | The value you passed for `emoji` is not a recognised Unicode emoji. |
+| `400` | `"Too many reactions"` | The message already has 50 reactions. |
+| `403` | — | You are not a member of the channel. |
+| `404` | — | The message does not exist. |
 
 ---
 
 ### Remove a reaction — `POST /api/reaction/delete`
 
-Deletes a reaction you own. You can identify the reaction either by its row `id` (option A) or by the combination of message + emoji (option B) — useful when your UI stores the emoji but not the reaction row ID.
+Deletes a reaction you own. You can identify the reaction either by its row `id` (option A) or by the combination of message \+ emoji (option B) — useful when your UI stores the emoji but not the reaction row ID.
 
 **Request body — option A (by reaction ID)**
 
@@ -124,7 +128,7 @@ Deletes a reaction you own. You can identify the reaction either by its row `id`
   The reaction row ID returned when the reaction was created.
 </ParamField>
 
-**Request body — option B (by message + emoji)**
+**Request body — option B (by message \+ emoji)**
 
 <ParamField body="message" type="integer" required>
   ID of the message the reaction is on.
@@ -143,10 +147,10 @@ Deletes a reaction you own. You can identify the reaction either by its row `id`
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `400`  | Required fields are missing. |
-| `403`  | You are not the author of this reaction. |
-| `404`  | The reaction does not exist. |
+| --- | --- |
+| `400` | Required fields are missing. |
+| `403` | You are not the author of this reaction. |
+| `404` | The reaction does not exist. |
 
 ---
 

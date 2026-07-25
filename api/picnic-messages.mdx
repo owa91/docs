@@ -4,6 +4,10 @@ sidebarTitle: "Picnic Messages"
 description: "API reference for Clody Picnic posts. Admins create, edit, and delete posts; members view them. Supports file attachments, pinning, and read tracking."
 ---
 
+<Check>
+  **Bot is allowed** — every endpoint on this page accepts bot authentication via the `Authorization: <user_id> <token>` header. A bot that has been promoted to admin can create, edit, and delete posts just like any human admin. See the [Bots guide](/guides/bots).
+</Check>
+
 Picnic Messages (PMessages) are the posts that appear inside a Clody Picnic channel. Only picnic admins can create, edit, or delete posts — all members can read them. Posts support rich text content, CDN-hosted file attachments, read tracking, and a single pinned post per channel. Because authorship is hidden from regular members, admins have a dedicated endpoint to look up the real author of any post.
 
 ---
@@ -57,6 +61,7 @@ Picnic Messages (PMessages) are the posts that appear inside a Clody Picnic chan
 ### List posts in a picnic
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/list \
   -X POST \
@@ -64,6 +69,7 @@ curl https://clody.example.com/api/pm/list \
   -H "Content-Type: application/json" \
   -d '{"picnic": 1, "limit": 30}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/list`
@@ -123,6 +129,7 @@ Returns a paginated list of posts for a picnic, ordered from oldest to newest wi
 ### Get a single post
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/get \
   -X POST \
@@ -130,6 +137,7 @@ curl https://clody.example.com/api/pm/get \
   -H "Content-Type: application/json" \
   -d '{"id": 101}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/get`
@@ -147,7 +155,7 @@ Fetches a single post by its ID.
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
 
 ---
@@ -155,6 +163,7 @@ Fetches a single post by its ID.
 ### Get post author (admins only)
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/get_author \
   -X POST \
@@ -162,6 +171,7 @@ curl https://clody.example.com/api/pm/get_author \
   -H "Content-Type: application/json" \
   -d '{"id": 101}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/get_author`
@@ -185,7 +195,7 @@ An integer representing the author's user ID.
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of the picnic this post belongs to. |
 | `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
 
@@ -194,6 +204,7 @@ An integer representing the author's user ID.
 ### Create a post (admins only)
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/create \
   -X POST \
@@ -205,6 +216,7 @@ curl https://clody.example.com/api/pm/create \
     "cdn": ["https://cdn.clody.example.com/files/abc123.png"]
   }'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/create`
@@ -230,7 +242,7 @@ Publishes a new post to a picnic. **Admins only.**
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of this picnic. |
 
 <Note>
@@ -242,6 +254,7 @@ Publishes a new post to a picnic. **Admins only.**
 ### Edit a post (admins only)
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/edit \
   -X POST \
@@ -249,6 +262,7 @@ curl https://clody.example.com/api/pm/edit \
   -H "Content-Type: application/json" \
   -d '{"id": 101, "content": "Corrected content here"}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/edit`
@@ -270,7 +284,7 @@ Updates the text content of an existing post and marks it as edited. **Admins on
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of this picnic. |
 | `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
 
@@ -283,6 +297,7 @@ Updates the text content of an existing post and marks it as edited. **Admins on
 ### Delete a post
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/delete \
   -X POST \
@@ -290,6 +305,7 @@ curl https://clody.example.com/api/pm/delete \
   -H "Content-Type: application/json" \
   -d '{"id": 101}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/delete`
@@ -307,7 +323,7 @@ Permanently deletes a post and all its associated comments. You can delete a pos
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are neither an admin nor the author of this post. |
 | `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
 
@@ -320,6 +336,7 @@ Permanently deletes a post and all its associated comments. You can delete a pos
 ### Mark a post as read
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/pm/mark_read \
   -X POST \
@@ -327,6 +344,7 @@ curl https://clody.example.com/api/pm/mark_read \
   -H "Content-Type: application/json" \
   -d '{"id": 101}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/mark_read`
@@ -344,7 +362,7 @@ Records that you have read a post. This increments the post's `views` count and 
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `404` | `"Not Found"` | No post exists with that ID. |
 
 ---
@@ -352,6 +370,7 @@ Records that you have read a post. This increments the post's `views` count and 
 ### Pin or unpin a post (admins only)
 
 <CodeGroup>
+
 ```bash cURL
 # Pin a post
 curl https://clody.example.com/api/pm/pin_message \
@@ -367,6 +386,7 @@ curl https://clody.example.com/api/pm/pin_message \
   -H "Content-Type: application/json" \
   -d '{"id": 101, "pin": false}'
 ```
+
 </CodeGroup>
 
 `POST /api/pm/pin_message`
@@ -390,7 +410,7 @@ The pinned post ID is reflected in `data.pinned` on the [Picnic object](/api/pic
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not an admin of this picnic. |
 | `404` | `"Not Found"` | No post (or picnic) exists with that ID. |
 
@@ -405,7 +425,7 @@ The pinned post ID is reflected in `data.pinned` on the [Picnic object](/api/pic
 Your client receives these events over the active Socket.IO connection when post state changes.
 
 | Event | Payload | When |
-|-------|---------|------|
+| --- | --- | --- |
 | `new_pmessage` | [PMessage object](#the-pmessage-object) | A new post is published in a picnic you belong to. |
 | `update_pmessage` | [PMessage object](#the-pmessage-object) | An existing post is edited. |
 | `delete_pmessage` | `{ "id": integer, "picnic_id": integer }` | A post is deleted. Remove it from your local state using the `id` field. |

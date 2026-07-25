@@ -4,6 +4,10 @@ sidebarTitle: "Users"
 description: "Look up any Clody user by username or numeric ID. Returns their full profile including display name, avatar, online status, and relationship info."
 ---
 
+<Check>
+  **Bot is allowed** on `POST /api/users/get` via the `Authorization: <user_id> <token>` header. See the [Bots guide](/guides/bots).
+</Check>
+
 The Users API lets you fetch the public profile of any Clody account — including your own. You identify the user by either their username or their numeric ID, and Clody returns everything you need to render their profile card: display name, avatar, accent color, status text, bio, and your relationship with them. You must be logged in with a verified email address to use this endpoint.
 
 ---
@@ -109,7 +113,7 @@ curl -b cookies.txt -X POST https://clody.lol/api/users/get \
 ### Error codes
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `400` | `"Bad Requests"` | Neither `username` nor `id` was provided. |
 | `400` | `"Not Authorized"` | No valid or verified session cookie. |
 | `403` | `"Forbidden"` | The user has disabled friend requests (`accepts_friend_requests: false`) and you are neither friends with them nor viewing your own profile. Their profile is not visible to you. |

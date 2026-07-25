@@ -4,6 +4,10 @@ sidebarTitle: "Comments"
 description: "API reference for Clody Picnic comments. Members leave threaded replies on posts, like comments, and edit or delete their own contributions."
 ---
 
+<Check>
+  **Bot is allowed** — every endpoint on this page accepts bot authentication via the `Authorization: <user_id> <token>` header. See the [Bots guide](/guides/bots).
+</Check>
+
 Comments let picnic members start threaded discussions beneath individual posts. They are only available on picnics where the owner has enabled the `supports_comments` flag — attempting to list or create comments on a picnic without this flag returns a `403`. Any member can post a comment, reply to another comment, like or unlike comments, and edit or delete their own contributions. Picnic admins can also delete any member's comment for moderation purposes.
 
 ---
@@ -61,6 +65,7 @@ Comments let picnic members start threaded discussions beneath individual posts.
 ### List comments on a post
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/comment/list \
   -X POST \
@@ -68,6 +73,7 @@ curl https://clody.example.com/api/comment/list \
   -H "Content-Type: application/json" \
   -d '{"message": 101, "limit": 20}'
 ```
+
 </CodeGroup>
 
 `POST /api/comment/list`
@@ -121,7 +127,7 @@ Returns a paginated list of comments for a specific post, ordered from newest to
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Comments are disabled"` | This picnic does not have comments enabled. |
 | `404` | `"Not Found"` | The post or its picnic does not exist. |
 
@@ -130,6 +136,7 @@ Returns a paginated list of comments for a specific post, ordered from newest to
 ### Get a single comment
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/comment/get \
   -X POST \
@@ -137,6 +144,7 @@ curl https://clody.example.com/api/comment/get \
   -H "Content-Type: application/json" \
   -d '{"id": 55}'
 ```
+
 </CodeGroup>
 
 `POST /api/comment/get`
@@ -154,7 +162,7 @@ Fetches a single comment by its ID.
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `404` | `"Not Found"` | No comment exists with that ID. |
 
 ---
@@ -162,6 +170,7 @@ Fetches a single comment by its ID.
 ### Create a comment
 
 <CodeGroup>
+
 ```bash cURL
 # Top-level comment
 curl https://clody.example.com/api/comment/create \
@@ -177,6 +186,7 @@ curl https://clody.example.com/api/comment/create \
   -H "Content-Type: application/json" \
   -d '{"message": 101, "content": "Agreed!", "answer_to": 55}'
 ```
+
 </CodeGroup>
 
 `POST /api/comment/create`
@@ -202,7 +212,7 @@ Posts a new comment on a picnic post. You must be a member of the picnic and com
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Comments are disabled"` | The picnic does not have comments enabled. |
 | `403` | `"You are banned"` | You are banned from this picnic. |
 | `403` | `"You need to be member to send comments"` | You have not joined this picnic. |
@@ -218,6 +228,7 @@ Posts a new comment on a picnic post. You must be a member of the picnic and com
 ### Edit a comment
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/comment/edit \
   -X POST \
@@ -225,6 +236,7 @@ curl https://clody.example.com/api/comment/edit \
   -H "Content-Type: application/json" \
   -d '{"id": 55, "content": "Love this update — especially the new design!"}'
 ```
+
 </CodeGroup>
 
 `POST /api/comment/edit`
@@ -246,7 +258,7 @@ Updates the text of one of your comments and marks it as edited. You can only ed
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are not the author of this comment. |
 | `404` | `"Not Found"` | No comment exists with that ID. |
 
@@ -259,6 +271,7 @@ Updates the text of one of your comments and marks it as edited. You can only ed
 ### Delete a comment
 
 <CodeGroup>
+
 ```bash cURL
 curl https://clody.example.com/api/comment/delete \
   -X POST \
@@ -266,6 +279,7 @@ curl https://clody.example.com/api/comment/delete \
   -H "Content-Type: application/json" \
   -d '{"id": 55}'
 ```
+
 </CodeGroup>
 
 `POST /api/comment/delete`
@@ -283,7 +297,7 @@ Permanently deletes a comment. You can delete your own comment at any time. Picn
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `403` | `"Forbidden"` | You are neither the comment author nor a picnic admin. |
 | `404` | `"Not Found"` | No comment exists with that ID. |
 
@@ -296,6 +310,7 @@ Permanently deletes a comment. You can delete your own comment at any time. Picn
 ### Like or unlike a comment
 
 <CodeGroup>
+
 ```bash cURL
 # Like a comment
 curl https://clody.example.com/api/comment/like \
@@ -311,6 +326,7 @@ curl https://clody.example.com/api/comment/like \
   -H "Content-Type: application/json" \
   -d '{"id": 55, "type": 0}'
 ```
+
 </CodeGroup>
 
 `POST /api/comment/like`
@@ -347,7 +363,7 @@ Adds or removes your like from a comment. Liking a comment you have already like
 **Error responses**
 
 | Status | Body | Meaning |
-|--------|------|---------|
+| --- | --- | --- |
 | `404` | `"Not Found"` | No comment exists with that ID. |
 
 ---
@@ -357,7 +373,7 @@ Adds or removes your like from a comment. Liking a comment you have already like
 Your client receives these events over the active Socket.IO connection when comment state changes.
 
 | Event | Payload | When |
-|-------|---------|------|
+| --- | --- | --- |
 | `new_comment` | [Comment object](#the-comment-object) | A new comment is posted on any post in a picnic you belong to. |
 | `update_comment` | [Comment object](#the-comment-object) | An existing comment is edited. |
 | `delete_comment` | `{ "id": integer, "message": integer }` | A comment is deleted. Use `id` to remove it from your local state and `message` to identify which post it belonged to. |

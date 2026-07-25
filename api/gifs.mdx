@@ -4,6 +4,10 @@ sidebarTitle: "GIFs"
 description: "Search Giphy for animated GIFs to attach in Clody Branch messages. Returns preview and full URLs ready for use with the CDN attachment endpoint."
 ---
 
+<Check>
+  **Bot is allowed** — every endpoint on this page accepts bot authentication via the `Authorization: <user_id> <token>` header. See the [Bots guide](/guides/bots).
+</Check>
+
 Clody gives you a built-in GIF picker backed by the Giphy library. You search for a GIF using this API, get back a list of results with preview and full-resolution URLs, and then register the chosen URL with the CDN endpoint to receive a filename you can attach to a Branch message.
 
 <Note>
@@ -51,9 +55,9 @@ Searches Giphy for animated GIFs matching your query. Returns up to 24 results. 
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `503`  | The Giphy API key is not configured on this server. |
-| `502`  | The Giphy service is temporarily unavailable. |
+| --- | --- |
+| `503` | The Giphy API key is not configured on this server. |
+| `502` | The Giphy service is temporarily unavailable. |
 
 ---
 

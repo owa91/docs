@@ -4,6 +4,10 @@ sidebarTitle: "CDN"
 description: "Upload files, avatars, and GIFs to Clody CDN for use in Branch messages and Picnic posts. Returns filenames to include in message cdn arrays."
 ---
 
+<Check>
+  **Bot is allowed** — every endpoint on this page accepts bot authentication via the `Authorization: <user_id> <token>` header. See the [Bots guide](/guides/bots).
+</Check>
+
 Clody uses an upload-then-reference pattern for all file attachments. You upload a file first and receive a `filename` back from the CDN. You then include that filename in the `cdn` array of a message creation request. Retrieval endpoints serve files back with membership checks so that only people who belong to the right Branch or Picnic can access the content.
 
 <Note>
@@ -38,7 +42,7 @@ Uploads any file (image, video, document, etc.) to a Branch. You must be a membe
 ```
 
 <ResponseField name="filename" type="string">
-  Randomly generated filename (hex token + original extension). Use this value in your `cdn` array.
+  Randomly generated filename (hex token \+ original extension). Use this value in your `cdn` array.
 </ResponseField>
 
 <ResponseField name="original_name" type="string">
@@ -48,9 +52,9 @@ Uploads any file (image, video, document, etc.) to a Branch. You must be a membe
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `400`  | Missing file, missing `id_bench`, or file exceeds 30 MB. |
-| `403`  | You are not a member of this Branch. |
+| --- | --- |
+| `400` | Missing file, missing `id_bench`, or file exceeds 30 MB. |
+| `403` | You are not a member of this Branch. |
 
 ---
 
@@ -77,10 +81,10 @@ Fetches a GIF from Giphy by URL and stores it in the Branch's CDN directory. Use
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `400`  | Missing fields, non-Giphy URL, or fetched GIF exceeds 15 MB. |
-| `403`  | You are not a member of this Branch. |
-| `502`  | Clody could not fetch the GIF from Giphy. |
+| --- | --- |
+| `400` | Missing fields, non-Giphy URL, or fetched GIF exceeds 15 MB. |
+| `403` | You are not a member of this Branch. |
+| `502` | Clody could not fetch the GIF from Giphy. |
 
 <Warning>
   Only URLs from `giphy.com` or its subdomains (e.g. `media2.giphy.com`) are accepted. Passing any other URL returns `400 Bad Request`.
@@ -114,10 +118,10 @@ Uploads a file to a Picnic's CDN storage. Only Picnic **admins** can use this en
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `400`  | Missing file, missing `id_picnic`, or file exceeds 30 MB. |
-| `403`  | You are not an admin of this Picnic. |
-| `404`  | The Picnic does not exist. |
+| --- | --- |
+| `400` | Missing file, missing `id_picnic`, or file exceeds 30 MB. |
+| `403` | You are not an admin of this Picnic. |
+| `404` | The Picnic does not exist. |
 
 ---
 
@@ -143,8 +147,8 @@ Replaces your user avatar. The server updates your profile immediately after a s
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `400`  | Missing file or file exceeds 30 MB. |
+| --- | --- |
+| `400` | Missing file or file exceeds 30 MB. |
 
 ---
 
@@ -174,10 +178,10 @@ Replaces the avatar for a Picnic community. Only the Picnic **owner** (not just 
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `400`  | Missing file, missing `id_picnic`, or file exceeds 5 MB. |
-| `403`  | You are not the owner of this Picnic. |
-| `404`  | The Picnic does not exist. |
+| --- | --- |
+| `400` | Missing file, missing `id_picnic`, or file exceeds 5 MB. |
+| `403` | You are not the owner of this Picnic. |
+| `404` | The Picnic does not exist. |
 
 ---
 
@@ -202,9 +206,9 @@ Serves a file stored in a Branch. You must be a member of the Branch.
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `403`  | You are not a member of this Branch. |
-| `404`  | File not found. |
+| --- | --- |
+| `403` | You are not a member of this Branch. |
+| `404` | File not found. |
 
 ---
 
@@ -227,8 +231,8 @@ Serves a file stored in a Picnic. You must be authenticated to make this request
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `404`  | Picnic or file not found. |
+| --- | --- |
+| `404` | Picnic or file not found. |
 
 ---
 
@@ -249,7 +253,7 @@ Serves a user or Picnic avatar image. Any authenticated user can access any avat
 ## Limits
 
 | Endpoint | Max size | Who can upload |
-|---|---|---|
+| --- | --- | --- |
 | `POST /api/cdn/benches/upload` | 30 MB | Branch members |
 | `POST /api/cdn/benches/gif` | 15 MB | Branch members |
 | `POST /api/cdn/picnics/upload` | 30 MB | Picnic admins |

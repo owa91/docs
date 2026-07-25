@@ -4,6 +4,12 @@ sidebarTitle: "Branches"
 description: "API reference for Clody Branches — private chats and group conversations. Create, rename, add/remove members, and retrieve branch details."
 ---
 
+<Check>
+  **Bot authentication** is accepted on read endpoints (`GET /api/branches/get`, `GET /api/branches/overview`, `POST /api/branch/get`) via the `Authorization: <user_id> <token>` header.
+
+  It is **rejected** on all mutating endpoints (`create`, `rename`, `add_member`, `kick`, `leave`) — those return `400 Not Authorized` when called with a bot token. Have the branch owner (a human) add the bot instead. See the [Bots guide](/guides/bots).
+</Check>
+
 Branches are Clody's fundamental unit of conversation. A branch can be a one-on-one direct message (`ispm: true`) or a multi-member group chat. Every branch tracks its members, owner, optional display name, and arbitrary metadata. All endpoints on this page require an authenticated, verified session cookie — unauthenticated requests return `400 "Not Authorized"`.
 
 ---
@@ -64,7 +70,7 @@ curl https://your-clody-instance.com/api/branches/get \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 
 ---
@@ -126,7 +132,7 @@ curl https://your-clody-instance.com/api/branches/overview \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 
 ---
@@ -166,7 +172,7 @@ curl https://your-clody-instance.com/api/branch/get \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` was not provided. |
 | `403` | `"Forbidden"` | You are not a member of this branch. |
@@ -225,7 +231,7 @@ curl https://your-clody-instance.com/api/branch/create \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `members` or `ispm` was not provided. |
 | `403` | `"Anybody isn't friend"` | At least one user in `members` is not in your friends list. |
@@ -236,7 +242,7 @@ curl https://your-clody-instance.com/api/branch/create \
 When a branch is created, every member (including you) receives the `added_branch` event:
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `added_branch` | Branch object | Fired on each member's socket connection when they are added to a branch. |
 
 ---
@@ -280,7 +286,7 @@ curl https://your-clody-instance.com/api/branch/rename \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` was not provided. |
 | `403` | `"Forbidden"` | You are not a member of this branch. |
@@ -289,12 +295,12 @@ curl https://your-clody-instance.com/api/branch/rename \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `update_branch` | `{ "branch_id": <int> }` | Fired on every member's socket when the branch is renamed. |
 
 ---
 
-## POST /api/branch/add_member
+## POST /api/branch/add\_member
 
 Add a new member to an existing group branch. You must be a current member of the branch, the user you are adding must be your friend, and the branch must not be a PM (`ispm: false`).
 
@@ -330,7 +336,7 @@ curl https://your-clody-instance.com/api/branch/add_member \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` or `member` was not provided. |
 | `403` | `"Forbidden"` | You are not a member of this branch. |
@@ -341,7 +347,7 @@ curl https://your-clody-instance.com/api/branch/add_member \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `added_branch` | Branch object | Fired on the newly added member's socket. |
 
 ---
@@ -382,7 +388,7 @@ curl https://your-clody-instance.com/api/branch/kick \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` or `member` was not provided. |
 | `400` | `"Can't kick the owner"` | You attempted to kick yourself (the owner). |
@@ -393,7 +399,7 @@ curl https://your-clody-instance.com/api/branch/kick \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `kicked_from_branch` | `{ "id": <branch_id>, "name": <branch_name> }` | Fired on the kicked member's socket. |
 
 ---
@@ -430,7 +436,7 @@ curl https://your-clody-instance.com/api/branch/leave \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` was not provided. |
 | `400` | `"You are owner"` | You are the branch owner and cannot leave. |
@@ -439,7 +445,7 @@ curl https://your-clody-instance.com/api/branch/leave \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `left_branch` | `{ "id": <branch_id>, "member": <display_name> }` | Fired on every remaining member's socket when someone leaves. |
 
 ---
@@ -449,7 +455,7 @@ curl https://your-clody-instance.com/api/branch/leave \
 The following real-time events relate to branch membership and metadata changes. Subscribe to these on your Socket.IO client to keep your UI in sync without polling.
 
 | Event | Payload | Trigger |
-|-------|---------|---------|
+| --- | --- | --- |
 | `added_branch` | Branch object | You were added to a branch (on creation or via `add_member`). |
 | `update_branch` | `{ "branch_id": integer }` | A branch you belong to was renamed. Re-fetch the branch to get the updated name. |
 | `kicked_from_branch` | `{ "id": integer, "name": string \| null }` | You were removed from a branch by the owner. |
