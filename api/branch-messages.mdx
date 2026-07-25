@@ -4,6 +4,10 @@ sidebarTitle: "Branch Messages"
 description: "API reference for sending, listing, editing, deleting, and marking as read messages in Clody Branches. Supports replies, file attachments, and pagination."
 ---
 
+<Check>
+  **Bot is allowed** — every endpoint on this page accepts bot authentication via the `Authorization: <user_id> <token>` header. See the [Bots guide](/guides/bots).
+</Check>
+
 Branch Messages (BMessages) are the individual chat messages that live inside a Clody Branch. You can send plain text, attach up to 10 CDN-hosted files, and reply directly to previous messages. All endpoints require an authenticated, verified session cookie — unauthenticated requests return `400 "Not Authorized"`. You must be a member of the branch to interact with its messages.
 
 <Note>
@@ -50,6 +54,7 @@ Every message endpoint returns messages in the following shape:
 
 <ResponseField name="data" type="object">
   Additional metadata. Contains a single field:
+
   - `answer_to` (`integer | null`) — the ID of the message this message is a reply to, or `null` if it is not a reply.
 </ResponseField>
 
@@ -121,7 +126,7 @@ curl https://your-clody-instance.com/api/bm/list \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `branch` was not provided. |
 | `403` | `"Forbidden"` | You are not a member of this branch. |
@@ -166,7 +171,7 @@ curl https://your-clody-instance.com/api/bm/get \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` was not provided. |
 | `403` | `"Forbidden"` | You are not a member of the branch that contains this message. |
@@ -245,7 +250,7 @@ curl https://your-clody-instance.com/api/bm/create \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `branch` or `content` is missing, `cdn` has more than 10 items, or `content` exceeds 5 000 characters. |
 | `403` | `"Forbidden"` | You are not a member of this branch. |
@@ -254,7 +259,7 @@ curl https://your-clody-instance.com/api/bm/create \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `new_bmessage` | Message object | Fired on every branch member's socket when a new message is sent. |
 
 ---
@@ -305,7 +310,7 @@ curl https://your-clody-instance.com/api/bm/edit \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` or `new_content` is missing, or `new_content` exceeds 5 000 characters. |
 | `403` | `"Forbidden"` | You are not the author of this message. |
@@ -314,7 +319,7 @@ curl https://your-clody-instance.com/api/bm/edit \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `update_bmessage` | Message object | Fired on every branch member's socket when a message is edited. |
 
 ---
@@ -351,7 +356,7 @@ curl https://your-clody-instance.com/api/bm/delete \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` was not provided. |
 | `403` | `"Forbidden"` | You are not the author of this message. |
@@ -360,12 +365,12 @@ curl https://your-clody-instance.com/api/bm/delete \
 ### Socket.IO Events Emitted
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `delete_bmessage` | `{ "id": <message_id>, "branch_id": <branch_id> }` | Fired on every branch member's socket when a message is deleted. |
 
 ---
 
-## POST /api/bm/mark_read
+## POST /api/bm/mark\_read
 
 Mark a message as read by the current user. This appends your user ID to the message's `read` array. If you have already marked the message as read, the call is a no-op and still returns `200`.
 
@@ -397,7 +402,7 @@ curl https://your-clody-instance.com/api/bm/mark_read \
 ### Error Codes
 
 | Status | Message | Description |
-|--------|---------|-------------|
+| --- | --- | --- |
 | `400` | `"Not Authorized"` | Missing or invalid session cookie. |
 | `400` | `"Bad Request"` | `id` was not provided. |
 | `403` | `"Forbidden"` | You are not a member of the branch that contains this message. |
@@ -408,7 +413,7 @@ curl https://your-clody-instance.com/api/bm/mark_read \
 When the read status changes (i.e., you were not already in `read`), every branch member receives:
 
 | Event | Payload | Description |
-|-------|---------|-------------|
+| --- | --- | --- |
 | `update_bmessage` | Message object | Fired on every branch member's socket with the updated `read` array. |
 
 ---
@@ -418,7 +423,7 @@ When the read status changes (i.e., you were not already in `read`), every branc
 Subscribe to these events on your Socket.IO client to receive real-time message updates without polling.
 
 | Event | Payload | Trigger |
-|-------|---------|---------|
+| --- | --- | --- |
 | `new_bmessage` | Message object | A new message was sent in a branch you belong to. |
 | `update_bmessage` | Message object | A message was edited or its `read` array changed (someone marked it as read). |
 | `delete_bmessage` | `{ "id": integer, "branch_id": integer }` | A message was deleted from a branch you belong to. |
