@@ -4,6 +4,10 @@ sidebarTitle: "Voice Calls"
 description: "API reference for Clody voice calls. Covers REST endpoints for tokens and servers, and Socket.IO events for starting, joining, and managing calls."
 ---
 
+<Warning>
+  **Bots are not allowed** on any voice-call REST endpoint (`/api/calls/get`, `/api/calls/servers`, `/api/calls/token`). Calls to these routes with a bot `Authorization` header return `400 Not Authorized`. Voice is a human-session-only feature.
+</Warning>
+
 Clody voice calls combine a small set of REST endpoints with a dedicated Socket.IO namespace (`/bcalls`). You use REST to look up available voice servers, fetch the current call state for a Branch, and obtain a short-lived token for the WebRTC layer. Everything else — starting, joining, leaving, and managing calls — happens over Socket.IO so participants receive updates in real time.
 
 ---
@@ -83,8 +87,8 @@ Returns the current call state for a Branch, or `null` if there is no active cal
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `403`  | You are not a member of this Branch. |
+| --- | --- |
+| `403` | You are not a member of this Branch. |
 
 ---
 
@@ -111,8 +115,8 @@ Issues a short-lived token that authorises you to connect to the voice server's 
 **Error responses**
 
 | Status | Meaning |
-|--------|---------|
-| `403`  | You are not a member of this Branch. |
+| --- | --- |
+| `403` | You are not a member of this Branch. |
 
 <Tip>
   Fetch a fresh token each time you join a call. Tokens are scoped to your user ID and the specific Branch, so you cannot reuse a token across calls.
@@ -138,8 +142,7 @@ Starts a new voice call in a Branch. Emit this event on the **main `/` namespace
   Hostname of the preferred voice server (must be a value from `GET /api/calls/servers`). Omit to start without a designated server.
 </ParamField>
 
-**Server emits back to you:** `started_call` with the new call state object.  
-**Server emits to other members:** `new_call` with the call state object.
+**Server emits back to you:** `started_call` with the new call state object.<br />**Server emits to other members:** `new_call` with the call state object.
 
 **Errors emitted:** `error` — if the Branch already has an active call, if you are not a member, or if `server_addr` is not a recognised server.
 
@@ -254,7 +257,7 @@ Registers or unregisters you as a watcher of another participant's screen share.
 ### Server → Client Events (`/bcalls` namespace)
 
 | Event | Payload | When it fires |
-|-------|---------|---------------|
+| --- | --- | --- |
 | `update` | Call state object | Any change to call state — members joining/leaving, mic toggles, screen sharing changes. |
 | `error` | `{ cause: string }` | An action you attempted failed (e.g. not a member, call already exists). |
 
@@ -265,7 +268,7 @@ Registers or unregisters you as a watcher of another participant's screen share.
 These events are delivered on the main Socket.IO connection (`/`), not on `/bcalls`.
 
 | Event | Payload | When it fires |
-|-------|---------|---------------|
+| --- | --- | --- |
 | `new_call` | Call state object | A call started in a Branch you belong to — you are being called. |
 | `started_call` | Call state object | Confirmation that the call you just started is active. Sent in response to emitting `start_call` on the main namespace. |
 | `stop_call` | `{ id: integer }` | The call in Branch `id` has ended (last member left). |
