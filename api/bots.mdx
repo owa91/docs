@@ -1,0 +1,227 @@
+---
+title: "Clody Bots API: Create, Manage, and Authenticate Bots"
+sidebarTitle: "Bots"
+description: "API reference for managing Clody bots — create, edit, delete, list, and regenerate tokens. Includes the Authorization header format used to authenticate as a bot on any endpoint."
+---
+
+Bots are automated user accounts you own. Each bot has its own `User` record (`isbot = true`) and a long-lived API token. Use the token in the `Authorization` header to call the rest of the Clody API as the bot.
+
+For a conceptual overview and usage examples, see the [Bots guide](/guides/bots).
+
+## Authentication
+
+All `/api/bot/*` and `/api/bots/*` endpoints require a **human** session cookie — you cannot manage bots using another bot's token.
+
+Other endpoints across the API accept bot authentication via a header instead of a session cookie:
+
+```text
+Authorization: <user_id> <token>
+```
+
+Where `<user_id>` is the bot's `user` field (the backing user ID) and `<token>` is the plaintext token returned by `/api/bot/create` or `/api/bot/regenerate`.
+
+<Note>
+  Send `user`, not `id`. `id` is the internal bot record ID; `user` is the user ID the rest of the API expects.
+</Note>
+
+---
+
+## POST /api/bot/create
+
+Create a new bot owned by the current session user.
+
+### Request body
+
+<ParamField body="name" type="string" required>
+  Username for the bot. Trimmed. Max 32 characters. Must contain the substring `bot` (case-insensitive). Must be unique across all users.
+</ParamField>
+
+### Response `200`
+
+```json
+{
+  "id": 7,
+  "user": 4821,
+  "username": "weather-bot",
+  "display_name": "weather-bot",
+  "avatar": null,
+  "description": "",
+  "token": "c0ffee1234567890abcdef1234567890"
+}
+```
+
+<Warning>
+  `token` is returned **only** on this endpoint (and on `/api/bot/regenerate`). Store it immediately. It is stored on the server as a hash and cannot be retrieved later.
+</Warning>
+
+### Errors
+
+| Status | Body |
+| --- | --- |
+| `400` | `"Not Authorized"` — no human session. |
+| `400` | `"Bad Request"` — `name` missing or longer than 32 characters. |
+| `403` | `"In name must be word <bot>"` — `name` doesn't contain `bot`. |
+| `403` | `"Name is taken"` — username already exists. |
+| `403` | `"You have 20 bots"` — per-owner cap of 20 reached. |
+
+---
+
+## POST /api/bot/edit
+
+Update the bot's display name and description.
+
+### Request body
+
+<ParamField body="id" type="number" required>
+  Bot record ID (the `id` field from create/list responses).
+</ParamField>
+
+<ParamField body="display_name" type="string" required>
+  New display name. Trimmed. Max 64 characters after trimming; must be non-empty.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional. Trimmed and truncated to 300 characters. Pass `""` to clear.
+</ParamField>
+
+### Response `200`
+
+Returns the updated bot summary (without `token`).
+
+```json
+{
+  "id": 7,
+  "user": 4821,
+  "username": "weather-bot",
+  "display_name": "Weather Bot",
+  "avatar": null,
+  "description": "Posts hourly weather updates"
+}
+```
+
+### Errors
+
+| Status | Body |
+| --- | --- |
+| `400` | `"Not Authorized"` |
+| `400` | `"Bad Request"` — missing `id`/`display_name`, or `display_name` is empty/over 64 chars. |
+| `403` | `"Forbidden"` — you don't own this bot. |
+| `404` | `"Not Found"` — bot or backing user doesn't exist. |
+
+---
+
+## POST /api/bot/regenerate
+
+Issue a new token and invalidate the old one immediately.
+
+### Request body
+
+<ParamField body="id" type="number" required>
+  Bot record ID.
+</ParamField>
+
+### Response `200`
+
+```json
+{ "token": "newtoken1234567890abcdef1234567890" }
+```
+
+<Warning>
+  The previous token stops working the moment this endpoint returns. Update any deployed bots before rotating.
+</Warning>
+
+### Errors
+
+| Status | Body |
+| --- | --- |
+| `400` | `"Not Authorized"` |
+| `400` | `"Bad Request"` — missing `id`. |
+| `403` | `"Forbidden"` |
+| `404` | `"Not Found"` |
+
+---
+
+## POST /api/bot/delete
+
+Permanently delete the bot. This also deletes the bot's backing user account and removes it from every Branch it was a member of. Messages the bot sent are **not** deleted.
+
+### Request body
+
+<ParamField body="id" type="number" required>
+  Bot record ID.
+</ParamField>
+
+### Response `200`
+
+```json
+"Success"
+```
+
+### Errors
+
+| Status | Body |
+| --- | --- |
+| `400` | `"Not Authorized"` |
+| `400` | `"Bad Request"` — missing `id`. |
+| `403` | `"Forbidden"` |
+| `404` | `"Not Found"` |
+
+---
+
+## GET /api/bots/get
+
+List every bot owned by the current session user. Sorted by bot `id` descending (newest first).
+
+### Response `200`
+
+```json
+[
+  {
+    "id": 7,
+    "user": 4821,
+    "username": "weather-bot",
+    "display_name": "Weather Bot",
+    "avatar": null,
+    "description": "Posts hourly weather updates"
+  }
+]
+```
+
+The `token` field is **not** included — it is only visible at creation and regeneration time.
+
+### Errors
+
+| Status | Body |
+| --- | --- |
+| `400` | `"Not Authorized"` |
+
+---
+
+## POST /api/bot/get
+
+Get a single bot you own.
+
+### Request body
+
+<ParamField body="id" type="number" required>
+  Bot record ID.
+</ParamField>
+
+### Response `200`
+
+Returns the bot summary. Note that the `token` field here contains the **hash** of the token, not the plaintext — useful only for identifying whether the token has changed, not for authenticating.
+
+### Errors
+
+| Status | Body |
+| --- | --- |
+| `400` | `"Not Authorized"` |
+| `400` | `"Bad Request"` — missing `id`. |
+| `403` | `"Forbidden"` |
+| `404` | `"Not Found"` |
+
+---
+
+## Bot Panel
+
+`GET /bots_panel` — renders the built-in web UI for managing bots. Requires a human session (redirects to `/app/login` otherwise). This is a page, not a JSON endpoint.

@@ -41,7 +41,8 @@
               "guides/messaging",
               "guides/voice-calls",
               "guides/media-uploads",
-              "guides/friends"
+              "guides/friends",
+              "guides/bots"
             ]
           }
         ]
@@ -85,6 +86,12 @@
             "pages": [
               "api/voice-calls",
               "api/websocket-events"
+            ]
+          },
+          {
+            "group": "Bots",
+            "pages": [
+              "api/bots"
             ]
           }
         ]

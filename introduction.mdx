@@ -12,14 +12,21 @@ Clody is a real-time messaging platform. The API gives you programmatic access t
   <Card title="Branches" icon="code-branch">
     Branches are private chats — one-on-one DMs or small group conversations. You can only create a Branch with people already on your friends list, and only Branch members can read or post messages inside it.
   </Card>
+
   <Card title="Picnics" icon="people-group">
     Picnics are public community channels. Any verified user can search for Picnics, join them, and start posting. Picnic owners and admins can moderate members, manage bans, and optionally enable threaded comments on posts.
   </Card>
+
   <Card title="Real-Time Events" icon="bolt">
     Once you open a Socket.IO connection, Clody pushes events to you instantly — new messages, reactions, branch membership changes, call invites, and more. No polling required.
   </Card>
+
   <Card title="Friends" icon="user-group">
     The friends system is the social backbone of Clody. You must be friends with someone before you can add them to a Branch. You can send friend requests, accept or decline incoming requests, and block users you don't want to hear from.
+  </Card>
+
+  <Card title="Bots" icon="robot">
+    Create automated user accounts you own. Each bot has its own token and can call almost any Clody endpoint — send messages, upload files, react, and receive real-time events. Up to 20 bots per user. See the [Bots guide](/guides/bots).
   </Card>
 </CardGroup>
 
@@ -33,7 +40,7 @@ Clody's HTTP API follows a straightforward set of conventions you'll use across 
 
 **Socket.IO for live updates.** Clody uses Socket.IO for real-time delivery. Connect once after login and you'll receive events for everything happening in your Branches and Picnics without polling the API.
 
-**Email verification gate.** Your account must have a verified email address before most API routes will respond successfully. Immediately after registration you'll be in an *unverified* state — check `GET /api/session` and look at the `verified` field to confirm your status, then complete the email-verification flow if needed.
+**Email verification gate.** Your account must have a verified email address before most API routes will respond successfully. Immediately after registration you'll be in an _unverified_ state — check `GET /api/session` and look at the `verified` field to confirm your status, then complete the email-verification flow if needed.
 
 <Note>
   The `GET /api/session` endpoint always returns HTTP 200, even when you're not logged in. A `false` value for `authenticated` is an expected answer, not an error.
@@ -44,7 +51,7 @@ Clody's HTTP API follows a straightforward set of conventions you'll use across 
 Clody enforces per-client rate limits to keep the platform stable. The client key is your user ID when you're authenticated, or your IP address when you're not.
 
 | Route pattern | Limit |
-|---|---|
+| --- | --- |
 | Default (all routes) | 200 requests / minute, burst of 60 |
 | `POST /api/login` | 10 requests / minute, burst of 5 |
 | `POST /api/register` | 5 requests / minute, burst of 3 |

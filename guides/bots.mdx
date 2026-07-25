@@ -1,0 +1,173 @@
+---
+title: "How to Create and Use Bots in Clody"
+sidebarTitle: "Bots"
+description: "Learn how to create bots in Clody, authenticate as a bot with a token, edit bot profiles, and use bots to send messages and act on behalf of automation."
+---
+
+Bots are automated user accounts you own. Each bot has its own `User` (with a username, display name, avatar, and description) and its own long-lived API token. You use the token to call almost any Clody API endpoint as the bot — sending messages, uploading files, reacting, and more.
+
+This guide covers how to create a bot, authenticate as one, and manage its lifecycle. For the full endpoint reference, see [Bots API](/api/bots).
+
+## How Bots Work
+
+- Every bot is backed by a real `User` account with `isbot = true`. That user has a numeric ID just like any human account.
+- Only the **owner** of a bot can create, edit, delete, or regenerate the token for that bot. The owner is the user who called `/api/bot/create`.
+- Each user can own up to **20 bots**.
+- The bot's `username` **must contain the word `bot`** (case-insensitive). This is enforced at creation time.
+- Bots authenticate via the `Authorization` header instead of a session cookie. See [Authenticating as a Bot](#authenticating-as-a-bot).
+- Bots can be added to Branches like any other user, and once inside a Branch they can send/edit/delete their own messages, upload files, react, and receive real-time events.
+
+## Create a Bot
+
+`POST /api/bot/create`
+
+Creates a new bot owned by the current session user. Requires a logged-in **human** session — you cannot create bots using another bot's token.
+
+<ParamField body="name" type="string" required>
+  Username for the bot. Max 32 characters. Must contain the substring `bot` (case-insensitive). Must be unique across all users.
+</ParamField>
+
+### Example
+
+```bash
+curl -X POST https://clody.lol/api/bot/create \
+  -H "Content-Type: application/json" \
+  --cookie "session=..." \
+  -d '{"name": "weather-bot"}'
+```
+
+### Response
+
+```json
+{
+  "id": 7,
+  "user": 4821,
+  "username": "weather-bot",
+  "display_name": "weather-bot",
+  "avatar": null,
+  "description": "",
+  "token": "c0ffee1234567890abcdef1234567890"
+}
+```
+
+<Warning>
+  The `token` field is returned **only once**, at creation time. Store it immediately — you cannot retrieve it again. If you lose it, use `/api/bot/regenerate` to issue a new one.
+</Warning>
+
+## Authenticating as a Bot
+
+Instead of a session cookie, send an `Authorization` header on every request. The value is the bot's **user ID** (not the bot ID), a space, and the token you received:
+
+```text
+Authorization: <user_id> <token>
+```
+
+Example:
+
+```bash
+curl https://clody.lol/api/branches/overview \
+  -H "Authorization: 4821 c0ffee1234567890abcdef1234567890"
+```
+
+<Note>
+  Use the **`user` field** from the create response, not the `id` field. `id` is the internal bot record ID; `user` is the bot's user ID and is what the rest of the API expects.
+</Note>
+
+A valid header authenticates the bot for that request just like a session cookie would authenticate a human. If the header is malformed, the user isn't a bot, or the token doesn't match, the request is treated as unauthenticated and returns `400 Not Authorized`.
+
+### Which endpoints accept bot auth?
+
+Any endpoint whose handler calls `check_session(..., header_authorization=request.headers.get("Authorization"))` accepts a bot token. In practice this covers messaging, Branches, CDN uploads, reactions, gifs, comments, picnics, friends, voice calls, and settings.
+
+A small number of endpoints explicitly reject bots (they pass `allow_bots=False`). Bot management itself (`/api/bot/*`) is one such group — you cannot manage bots using another bot's token.
+
+## Edit a Bot's Profile
+
+`POST /api/bot/edit`
+
+Update the bot's display name and description. Both are shown to other users in chats.
+
+<ParamField body="id" type="number" required>
+  The bot's `id` (the internal bot record ID from the create response).
+</ParamField>
+
+<ParamField body="display_name" type="string" required>
+  New display name. Trimmed; max 64 characters after trimming; must be non-empty.
+</ParamField>
+
+<ParamField body="description" type="string">
+  Optional description shown on the bot's profile. Trimmed and truncated to 300 characters. Omit or send `""` to clear.
+</ParamField>
+
+Returns the updated bot summary.
+
+## Regenerate the Token
+
+`POST /api/bot/regenerate`
+
+Issue a new token and invalidate the old one. Use this if the token leaked or you rotated credentials.
+
+<ParamField body="id" type="number" required>
+  The bot's `id`.
+</ParamField>
+
+### Response
+
+```json
+{ "token": "newtoken1234567890abcdef1234567890" }
+```
+
+The new token is shown once. The previous token stops working immediately.
+
+## List Your Bots
+
+`GET /api/bots/get`
+
+Returns every bot owned by the current session user, newest first. The `token` field is **not** included — tokens are only visible at creation and regeneration time.
+
+## Delete a Bot
+
+`POST /api/bot/delete`
+
+Permanently deletes the bot, its backing user account, and removes it from every Branch it was a member of. Messages the bot sent are **not** deleted.
+
+<ParamField body="id" type="number" required>
+  The bot's `id`.
+</ParamField>
+
+<Warning>
+  Deletion is irreversible. The bot's `username` becomes available for reuse.
+</Warning>
+
+## Common Patterns
+
+### Sending a message from a bot
+
+Once your bot is a member of a Branch, sending a message is a normal `POST /api/bmessage/send` — just use the bot's `Authorization` header instead of a session cookie. See [Branch Messages](/api/branch-messages).
+
+```bash
+curl -X POST https://clody.lol/api/bmessage/send \
+  -H "Content-Type: application/json" \
+  -H "Authorization: 4821 c0ffee1234567890abcdef1234567890" \
+  -d '{"branch": 12, "content": "Hello from the bot"}'
+```
+
+### Adding your bot to a Branch
+
+You add the bot the same way you add any user — by calling `/api/branch/add_member` with the bot's **user ID**. The bot must be a friend of the branch member adding it, following the same friendship rules as human users.
+
+### Receiving real-time events
+
+Bots can open a Socket.IO connection just like a user. Authenticate the socket handshake by including the `Authorization` header. The bot receives all the same events as any Branch member — `new_bmessage`, `update_bmessage`, `added_branch`, and so on. See [WebSocket Events](/api/websocket-events).
+
+## Errors
+
+| Status | Body | When |
+| --- | --- | --- |
+| `400` | `"Not Authorized"` | No valid session (only human sessions can manage bots). |
+| `400` | `"Bad Request"` | Missing `name`, `name` longer than 32 chars, or missing/invalid `id`/`display_name`. |
+| `403` | `"In name must be word <bot>"` | Bot username doesn't contain `bot` (case-insensitive). |
+| `403` | `"Name is taken"` | A user with that username already exists. |
+| `403` | `"You have 20 bots"` | You've hit the per-owner limit. |
+| `403` | `"Forbidden"` | You are not the owner of the target bot. |
+| `404` | `"Not Found"` | The bot or its backing user no longer exists. |
